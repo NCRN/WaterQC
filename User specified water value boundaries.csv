@@ -1,0 +1,20 @@
+CharacteristicName,Reasonable_min,Reasonable_max
+Acid Neutralizing Capacity (ANC),0,7000
+Barometric pressure,700,800
+Base flow discharge,0,700
+Conductivity,0,6000
+Cross-Section Depth,0,5
+Dissolved oxygen (DO),1,25
+Dissolved oxygen saturation,0.1,210
+"Nitrogen, ammonia (NH3) as NH3",0,2.5
+"Nitrogen, mixed forms (NH3)+(NH4)+organic+(NO2)+(NO3)",0,15
+Phosphorus as PO4,0,9
+"Phosphorus, orthophosphate as PO4",0,4
+RBP Stream Velocity,0,8
+Salinity,0,6
+"Solids, Dissolved (TDS)",0,5000
+Specific conductance,0,10000
+"Temperature, air",-10,40
+"Temperature, water",-1,35
+Wetted Width,0,110
+pH,3,12
