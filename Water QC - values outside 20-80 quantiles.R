@@ -25,6 +25,7 @@ wdata <- read.csv(paste(fileName,"_Flagged.csv",sep=""))
 
 # Format dates as date
 wdata$ActivityStartDate <- as.Date(wdata$ActivityStartDate)
+wdata$Month <- month(wdata$ActivityStartDate)
 
 # Save character results for later
 char_results <- wdata$ResultMeasureValue
@@ -49,6 +50,7 @@ wqdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water moni
 sites_chars <- wqdata %>%
   group_by(MonitoringLocationIdentifier) %>%
   group_by(CharacteristicName, .add=T) %>%
+  group_by(Month, .add=T) %>%
   summarise(Q20=quantile(ResultMeasureValue,0.2,na.rm=T), Q80=quantile(ResultMeasureValue,0.8,na.rm=T))
 
 # Remove NAs and extra choice list characteristics
@@ -73,6 +75,7 @@ for (i in 1:nrow(sites_chars)){
   wdata$`Flag (outside 20-80 quantiles)`[
     wdata$MonitoringLocationIdentifier==sites_chars$MonitoringLocationIdentifier[i] & 
     wdata$CharacteristicName==sites_chars$CharacteristicName[i] &
+    wdata$Month==sites_chars$Month[i] &
     (wdata$ResultMeasureValue < sites_chars$Q20[i] | wdata$ResultMeasureValue > sites_chars$Q80[i])] <- 1
 }
 
