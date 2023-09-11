@@ -20,7 +20,7 @@ library(lubridate)
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20230825_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20230906_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,".csv",sep=""))
 
 # Format dates as date
