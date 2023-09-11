@@ -24,7 +24,7 @@ library(htmlwidgets)
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20230825_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20230906_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,"_Flagged.csv",sep=""))
 
 # Format dates as date
@@ -82,7 +82,7 @@ plot(chars$ActivityStartDate[chars$Type==type], chars$`Count of characteristics`
      xlab="Date", ylab="Count of characteristics",main=type)
 
 # Save as csv
-# write.csv(chars, "Count of water characteristics for each activity ID.csv",row.names=F)
+write.csv(chars, "Count of water characteristics for each activity ID.csv",row.names=F)
 
 ################################################################################
 ### Investigate missing data by characteristic with pivot table (wide format)###
@@ -112,7 +112,7 @@ pw_char[pw==F] <- "Blank"
 pw_char[is.na(pw)] <- "No record"
 
 # Write to csv
-# write.csv(pw_char, "Record of characteristics and comments for each activity.csv",row.names=F)
+write.csv(pw_char, "Record of characteristics and comments for each activity.csv",row.names=F)
 
 ################################################################################
 ### Summarize by characteristics ###############################################
@@ -143,7 +143,7 @@ Summary <- Summary[c(4,1,2,3)]
 row.names(Summary) <- NULL
 
 # Write to csv
-# write.csv(Summary, "Number of recorded, blank, and no-records for each characteristic.csv", row.names=F)
+write.csv(Summary, "Number of recorded, blank, and no-records for each characteristic.csv", row.names=F)
 
 ################################################################################
 ### Investigate missing data by characteristic (long format)####################
@@ -216,7 +216,7 @@ pw_coms <- left_join(pw_coms,coms2,by=c("ActivityMediaSubdivisionName","Characte
 pw_coms <- pw_coms[pw_coms$Status != "",]
 
 # Write to csv
-# write.csv(pw_coms, "Long table of blanks and no-records.csv", na="", row.names=F)
+write.csv(pw_coms, "Long table of blanks and no-records.csv", na="", row.names=F)
 
 ################################################################################
 ### Plot by characteristics presence/absence ###################################
