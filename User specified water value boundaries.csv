@@ -7,8 +7,8 @@ Cross-Section Depth,0,5
 Dissolved oxygen (DO),1,25
 Dissolved oxygen saturation,0.1,210
 "Nitrogen, ammonia (NH3) as NH3",0,2.5
-"Nitrogen, mixed forms (NH3)+(NH4)+organic+(NO2)+(NO3)",0,15
-Phosphorus as PO4,0,9
+"Total Nitrogen, mixed forms",0,15
+"Total Phosphorus, mixed forms",0,9
 "Phosphorus, orthophosphate as PO4",0,4
 RBP Stream Velocity,0,8
 Salinity,0,6
