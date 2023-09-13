@@ -1,7 +1,7 @@
-# Water QC - values outside 20-80 quantiles
-# Dan Myers, 8/31/2023
+# Water QC - values outside quantiles
+# Dan Myers, 9/13/2023
 
-# This script flags water data results that are outside the 20-80 quantiles for
+# This script flags water data results that are outside the quantiles for
 # each site and characteristic
 
 
@@ -51,7 +51,12 @@ sites_chars <- wqdata %>%
   group_by(MonitoringLocationIdentifier) %>%
   group_by(CharacteristicName, .add=T) %>%
   group_by(Month, .add=T) %>%
-  summarise(Q20=quantile(ResultMeasureValue,0.2,na.rm=T), Q80=quantile(ResultMeasureValue,0.8,na.rm=T))
+  summarise(Q05=quantile(ResultMeasureValue,0.05,na.rm=T),
+            Q10=quantile(ResultMeasureValue,0.1,na.rm=T),
+            Q20=quantile(ResultMeasureValue,0.2,na.rm=T), 
+            Q80=quantile(ResultMeasureValue,0.8,na.rm=T),
+            Q90=quantile(ResultMeasureValue,0.9,na.rm=T),
+            Q95=quantile(ResultMeasureValue,0.95,na.rm=T))
 
 # Remove NAs and extra choice list characteristics
 sites_chars <- sites_chars[!is.na(sites_chars$Q20),]
@@ -62,13 +67,15 @@ sites_chars <- sites_chars[!sites_chars$CharacteristicName %in% c(
 
 
 # Save as csv
-write.csv(sites_chars, "Quantiles 20 and 80 for water values 2005-2022.csv", row.names=F)
+write.csv(sites_chars, "Quantiles for water values 2005-2022.csv", row.names=F)
 
 ################################################################################
 ### Add column to EDD flagging records #########################################
 ################################################################################
 # Create variable
 wdata$`Flag (outside 20-80 quantiles)` <- 0
+wdata$`Flag (outside 10-90 quantiles)` <- 0
+wdata$`Flag (outside 05-95 quantiles)` <- 0
 
 # Assign flag to abnormal values
 for (i in 1:nrow(sites_chars)){
@@ -77,6 +84,12 @@ for (i in 1:nrow(sites_chars)){
     wdata$CharacteristicName==sites_chars$CharacteristicName[i] &
     wdata$Month==sites_chars$Month[i] &
     (wdata$ResultMeasureValue < sites_chars$Q20[i] | wdata$ResultMeasureValue > sites_chars$Q80[i])] <- 1
+
+  wdata$`Flag (outside 10-90 quantiles)`[
+    wdata$MonitoringLocationIdentifier==sites_chars$MonitoringLocationIdentifier[i] & 
+      wdata$CharacteristicName==sites_chars$CharacteristicName[i] &
+      wdata$Month==sites_chars$Month[i] &
+      (wdata$ResultMeasureValue < sites_chars$Q10[i] | wdata$ResultMeasureValue > sites_chars$Q90[i])] <- 1
 }
 
 # Add character results back in
