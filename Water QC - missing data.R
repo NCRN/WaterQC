@@ -1,5 +1,5 @@
 # Water QC - missing data
-# Dan Myers, 8/31/2023
+# Dan Myers, 9/13/2023
 
 # This script flags water data activities that did not have a full record
 # data
@@ -38,13 +38,35 @@ wdata$ActivityStartDate <- as.Date(wdata$ActivityStartDate)
 # Select WQ data by project identifier
 wqdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water monitoring",]
 
+################################################################################
+### Create a "Flag Assessment" field that justifies reason for blank data#######
+################################################################################
+
+# Create fields for "sampleability" and "Flow, severity (choice list)"
+samp <- wqdata[wqdata$CharacteristicName=="sampleability",]
+samp <- samp[c("ActivityMediaSubdivisionName","ResultMeasureValue")]
+colnames(samp) <- c("ActivityMediaSubdivisionName","sampleability")
+
+flow <- wqdata[wqdata$CharacteristicName=="Flow, severity (choice list)",]
+flow <- flow[c("ActivityMediaSubdivisionName","ResultMeasureValue")]
+colnames(flow) <- c("ActivityMediaSubdivisionName","Flow_severity_choice_list")
+
+# Add them to the water quality data
+wqdata <- left_join(wqdata, samp, by="ActivityMediaSubdivisionName")
+wqdata <- left_join(wqdata, flow, by="ActivityMediaSubdivisionName")
+wqdata$sampleability[is.na(wqdata$sampleability)] <- 0
+wqdata$Flow_severity_choice_list[is.na(wqdata$Flow_severity_choice_list)] <- 0
+
+# Create a list of conditions that would lead us to expect a measurement that event
+conditions <- (wqdata$ResultDetectionConditionText == "" | (wqdata$ResultDetectionConditionText != "" & wqdata$ResultMeasureValue != "")) & 
+  wqdata$sampleability!="U" & !wqdata$Flow_severity_choice_list %in% c("DRY","INTERSTITIAL","FLOOD")  
 
 ################################################################################
 ### Plot number of characteristics for each activity over time##################
 ################################################################################
 
 # Summarize characteristics
-chars <- wqdata %>%
+chars <- wqdata[conditions,] %>%
   group_by(ActivityIdentifier) %>%
   group_by(ActivityStartDate, .add=T) %>%
   summarise(`Count of characteristics` = length(unique(CharacteristicName[ResultMeasureValue != ""]))) # All unique characteristics that have data
@@ -89,10 +111,10 @@ write.csv(chars, "Count of water characteristics for each activity ID.csv",row.n
 ################################################################################
 
 # Summarize by characteristic
-chars2 <- wqdata %>%
+chars2 <- wqdata[conditions,] %>%
   group_by(ActivityMediaSubdivisionName) %>%
   group_by(CharacteristicName, .add=T) %>%
-  group_by(ActivityCommentText, .add=T) %>% # To add comments in
+  # group_by(ActivityCommentText, .add=T) %>% # To add comments in
   summarise(Has_data = (sum(ResultMeasureValue != "")>0)) # 1 if there's data, 0 if it's all blank
 
 # Fill in blank characteristic names
@@ -112,15 +134,17 @@ pw_char[pw==F] <- "Blank"
 pw_char[is.na(pw)] <- "No record"
 
 # Write to csv
-write.csv(pw_char, "Record of characteristics and comments for each activity.csv",row.names=F)
+write.csv(pw_char, "Record of characteristics for each activity.csv",row.names=F)
 
 ################################################################################
 ### Summarize by characteristics ###############################################
 ################################################################################
 
 # Summarize by characteristic
-chars3 <- wqdata %>%
-  group_by(ActivityMediaSubdivisionName) %>%
+chars3 <- wqdata[conditions,] %>%
+  group_by(ActivityStartDate) %>%
+  group_by(MonitoringLocationIdentifier,.add=T) %>%
+  group_by(ActivityMediaSubdivisionName, .add=T) %>%
   group_by(CharacteristicName, .add=T) %>%
   summarise(Has_data = (sum(ResultMeasureValue != "")>0)) # 1 if there's data, 0 if it's all blank
 
@@ -133,9 +157,9 @@ pw2 <- chars3 %>%
 
 # Create summary data frame
 Summary <- data.frame(
-  Recorded = colSums(pw2[3:length(pw2)]==1, na.rm=T),
-  Blank = colSums(pw2[3:length(pw2)]==0, na.rm=T),
-  `No record` = colSums(is.na(pw2[3:length(pw2)])))
+  Recorded = colSums(pw2[4:length(pw2)]==1, na.rm=T),
+  Blank = colSums(pw2[4:length(pw2)]==0, na.rm=T),
+  `No record` = colSums(is.na(pw2[4:length(pw2)])))
 
 # Add characteristic names
 Summary$CharacteristicName <- row.names(Summary)
@@ -160,22 +184,21 @@ pw_char2[is.na(pw2)] <- "No record"
 
 # Pivot back longer with the "no record" rows now included
 pw_char3 <- pw_char2 %>%
-  pivot_longer(!ActivityMediaSubdivisionName,
+  pivot_longer(!c(ActivityMediaSubdivisionName, ActivityStartDate,MonitoringLocationIdentifier),
                names_to = "CharacteristicName",
                values_to = "Status")
 
 # Create comments table (Activity level)
-coms <- wdata[c("ActivityMediaSubdivisionName","CharacteristicName","ActivityCommentText")]
-coms <- coms[coms$ActivityCommentText != "",]
+coms <- wqdata[conditions,c("ActivityMediaSubdivisionName","ActivityCommentText")]
+coms <- coms[coms$ActivityCommentText != "" & coms$ActivityCommentText != "||",]
 
 # Remove duplicate comments (Activity level)
 coms <- coms[!duplicated(coms),] %>% 
-  arrange(ActivityMediaSubdivisionName,CharacteristicName,ActivityCommentText)
+  arrange(ActivityMediaSubdivisionName,ActivityCommentText)
 
 # Combine multiple comments (Activity level)
 for (i in 1:(nrow(coms)-1)){
-  if (coms$ActivityMediaSubdivisionName[i] == coms$ActivityMediaSubdivisionName[i+1] &
-    coms$CharacteristicName[i] == coms$CharacteristicName[i+1]){
+  if (coms$ActivityMediaSubdivisionName[i] == coms$ActivityMediaSubdivisionName[i+1]){
     
     # Combine them, separated by a "| ", then remove the copied comment
     coms$ActivityCommentText[i+1] <- paste(coms$ActivityCommentText[i], coms$ActivityCommentText[i+1], sep="| ")
@@ -188,7 +211,7 @@ coms <- coms[coms$ActivityCommentText != "",]
 
 
 # Create comments table (Result level)
-coms2 <- wdata[c("ActivityMediaSubdivisionName","CharacteristicName","ResultCommentText")]
+coms2 <- wqdata[conditions,c("ActivityMediaSubdivisionName","CharacteristicName","ResultCommentText")]
 coms2 <- coms2[coms2$ResultCommentText != "",]
 
 # Remove duplicate comments (Result level)
@@ -211,19 +234,53 @@ coms2 <- coms2[coms2$ResultCommentText != "",]
 
 
 # Join comment to long table and remove records that aren't missing
-pw_coms <- left_join(pw_char3,coms,by=c("ActivityMediaSubdivisionName","CharacteristicName"))
+pw_coms <- left_join(pw_char3,coms,by=c("ActivityMediaSubdivisionName"))
 pw_coms <- left_join(pw_coms,coms2,by=c("ActivityMediaSubdivisionName","CharacteristicName"))
 pw_coms <- pw_coms[pw_coms$Status != "",]
 
+# Remove sites not currently monitored
+current_sites <- wqdata %>%
+  group_by(MonitoringLocationIdentifier) %>%
+  summarise(start_date = min(ActivityStartDate, na.rm=T),
+            end_date = max(ActivityStartDate, na.rm=T))
+current_sites <- current_sites[year(current_sites$end_date)==2023,]
+
+# Remove rows that make sense there's no record there
+pw_coms2 <- pw_coms[
+  
+  # Currently monitored sites
+  pw_coms$MonitoringLocationIdentifier %in% current_sites$MonitoringLocationIdentifier &
+  
+  # Characteristics which should normally always be there
+  (pw_coms$CharacteristicName %in% c("Conductivity","Salinity",
+                                    "Acid Neutralizing Capacity (ANC)","RBP Stream Velocity",
+                                    "Base flow discharge","Wetted Width","Cross-Section Depth",
+                                    "Temperature, air","Dissolved oxygen (DO)",
+                                    "Dissolved oxygen saturation","Specific conductance",
+                                    "Temperature, water","pH","Total Nitrogen, mixed forms") |
+  
+    # Total phosphorus before 2009-01-13
+  (pw_coms$CharacteristicName == "Total Phosphorus, mixed forms" &
+     pw_coms$ActivityStartDate >= as.Date("2009-01-13")) |
+    
+    # TDS before 2016-05-05
+  (pw_coms$CharacteristicName == "Solids, Dissolved (TDS)"  &
+     pw_coms$ActivityStartDate >= as.Date("2016-05-05")) |
+    
+   # Barometric pressure started 2013-12-05
+  (pw_coms$CharacteristicName == "Barometric pressure"  &
+     pw_coms$ActivityStartDate >= as.Date("2013-12-05"))),
+]
+
 # Write to csv
-write.csv(pw_coms, "Long table of blanks and no-records.csv", na="", row.names=F)
+write.csv(pw_coms2, "Long table of blanks and no-records.csv", na="", row.names=F)
 
 ################################################################################
 ### Plot by characteristics presence/absence ###################################
 ################################################################################
 
 # Summarize by characteristic and date
-chars4 <- wqdata %>%
+chars4 <- wqdata[conditions,] %>%
   group_by(ActivityMediaSubdivisionName) %>%
   group_by(ActivityStartDate, .add=T) %>%
   group_by(CharacteristicName, .add=T) %>%
@@ -286,7 +343,7 @@ wdata$`QC Determination` <- NA
 wdata$`QC Determination`[wdata$Flag..outside.20.80.quantiles.==1] <- "OOR"
 
 # Assign QC Determination and remove unneeded columns
-wdata_join <- full_join(wdata, pw_coms[1:3], by=c("ActivityMediaSubdivisionName", "CharacteristicName"))
+wdata_join <- full_join(wdata, pw_coms2[1:4], by=c("ActivityMediaSubdivisionName", "CharacteristicName"))
 wdata_join$`QC Determination`[!is.na(wdata_join$Status)] <- wdata_join$Status[!is.na(wdata_join$Status)]
 wdata_qc <- wdata_join[!colnames(wdata_join) %in% c("Month","Flag..outside.20.80.quantiles.","Status")]
 
