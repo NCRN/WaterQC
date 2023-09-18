@@ -24,7 +24,7 @@ library(htmlwidgets)
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20230906_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20230915_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,"_Flagged.csv",sep=""))
 
 # Format dates as date
@@ -59,7 +59,7 @@ wqdata$Flow_severity_choice_list[is.na(wqdata$Flow_severity_choice_list)] <- 0
 
 # Create a list of conditions that would lead us to expect a measurement that event
 conditions <- (wqdata$ResultDetectionConditionText == "" | (wqdata$ResultDetectionConditionText != "" & wqdata$ResultMeasureValue != "")) & 
-  wqdata$sampleability!="U" & !wqdata$Flow_severity_choice_list %in% c("DRY","INTERSTITIAL","FLOOD")  
+  wqdata$sampleability=="Actively sampled" & !wqdata$Flow_severity_choice_list %in% c("DRY","INTERSTITIAL","FLOOD")  
 
 ################################################################################
 ### Plot number of characteristics for each activity over time##################
