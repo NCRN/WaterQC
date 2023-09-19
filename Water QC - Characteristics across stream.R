@@ -5,7 +5,7 @@ library(dplyr)
 library(tidyr)
 
 # Read data
-fileName <- "20230906_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20230915_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,"_Flagged.csv",sep=""))
 wqdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water monitoring",]
 
