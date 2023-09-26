@@ -24,11 +24,31 @@ library(htmlwidgets)
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20230915_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
-wdata <- read.csv(paste(fileName,"_Flagged.csv",sep=""))
+fileName <- "20230925_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+wdata <- read.csv(paste(fileName,".csv",sep=""))
 
 # Format dates as date
 wdata$ActivityStartDate <- as.Date(wdata$ActivityStartDate)
+
+# Charlie's string parsing script to create comment fields
+library(dplyr)
+library(stringr)
+# mystr <- '{"Station_Visit_Comment":"text,commas","Activity_Comment":"some text","Sampleability":"Actively Sampled","Flow_Severity_Choice_List":"NORMAL"}'
+# mydf <- data.frame(
+#   'ActivityCommentText' = mystr
+# )
+st_visit_regex <- '(?<=Station_Visit_Comment":").*?(?=",)'
+act_regex <- '(?<=Activity_Comment":").*?(?=",)'
+samp_regex <- '(?<=Sampleability":").*?(?=",)'
+flow_regex <- '(?<=Flow_Status_Choice_List":").*?(?=")'
+# stringr::str_extract(mystr, st_visit_regex) # sanity check
+# mydf <- mydf %>% dplyr::mutate(
+wdata <- wdata %>% dplyr::mutate(
+  Station_Visit_Comment = stringr::str_extract(ActivityCommentText, st_visit_regex)
+  ,Activity_Comment = stringr::str_extract(ActivityCommentText, act_regex)
+  ,Sampleability = stringr::str_extract(ActivityCommentText, samp_regex)
+  ,Flow_Status_Choice_List = stringr::str_extract(ActivityCommentText, flow_regex)
+)
 
 
 ################################################################################
@@ -42,24 +62,26 @@ wqdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water moni
 ### Create a "Flag Assessment" field that justifies reason for blank data#######
 ################################################################################
 
-# Create fields for "sampleability" and "Flow, severity (choice list)"
-samp <- wqdata[wqdata$CharacteristicName=="sampleability",]
-samp <- samp[c("ActivityMediaSubdivisionName","ResultMeasureValue")]
-colnames(samp) <- c("ActivityMediaSubdivisionName","sampleability")
-
-flow <- wqdata[wqdata$CharacteristicName=="Flow, severity (choice list)",]
-flow <- flow[c("ActivityMediaSubdivisionName","ResultMeasureValue")]
-colnames(flow) <- c("ActivityMediaSubdivisionName","Flow_severity_choice_list")
-
-# Add them to the water quality data
-wqdata <- left_join(wqdata, samp, by="ActivityMediaSubdivisionName")
-wqdata <- left_join(wqdata, flow, by="ActivityMediaSubdivisionName")
-wqdata$sampleability[is.na(wqdata$sampleability)] <- 0
-wqdata$Flow_severity_choice_list[is.na(wqdata$Flow_severity_choice_list)] <- 0
-
 # Create a list of conditions that would lead us to expect a measurement that event
-conditions <- (wqdata$ResultDetectionConditionText == "" | (wqdata$ResultDetectionConditionText != "" & wqdata$ResultMeasureValue != "")) & 
-  wqdata$sampleability=="Actively sampled" & !wqdata$Flow_severity_choice_list %in% c("DRY","INTERSTITIAL","FLOOD")  
+conditions <- (wqdata$ResultDetectionConditionText == "" | (wqdata$ResultDetectionConditionText != "" & wqdata$ResultMeasureValue != ""))
+  # (wqdata$Sampleability=="Actively Sampled" | is.na(wqdata$Sampleability)) & 
+  # (!wqdata$Flow_Status_Choice_List %in% c("DRY","INTERSTITIAL","FLOOD") | is.na(wqdata$Flow_Status_Choice_List))  
+
+# Make a vector of partial strings to search for
+strings <- c("dry", "froz", "unable", "access")
+
+# Search for the partial strings in comments
+conditions2 <- rep(TRUE,nrow(wqdata))
+keep <- rep(TRUE,nrow(wqdata))
+
+for (i in 1:length(strings)){
+  has_string <- grep(strings[i],wqdata$ActivityCommentText)
+  keep[has_string] <- FALSE
+  conditions2 <- conditions2 & keep
+}
+
+# Merge the conditions with the parsed text search
+conditions <- conditions & conditions2
 
 ################################################################################
 ### Plot number of characteristics for each activity over time##################
