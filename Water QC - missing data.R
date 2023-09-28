@@ -126,7 +126,7 @@ plot(chars$ActivityStartDate[chars$Type==type], chars$`Count of characteristics`
      xlab="Date", ylab="Count of characteristics",main=type)
 
 # Save as csv
-write.csv(chars, "Count of water characteristics for each activity ID.csv",row.names=F)
+# write.csv(chars, "Count of water characteristics for each activity ID.csv",row.names=F)
 
 ################################################################################
 ### Investigate missing data by characteristic with pivot table (wide format)###
@@ -156,7 +156,7 @@ pw_char[pw==F] <- "Blank"
 pw_char[is.na(pw)] <- "No record"
 
 # Write to csv
-write.csv(pw_char, "Record of characteristics for each activity.csv",row.names=F)
+# write.csv(pw_char, "Record of characteristics for each activity.csv",row.names=F)
 
 ################################################################################
 ### Summarize by characteristics ###############################################
@@ -189,7 +189,7 @@ Summary <- Summary[c(4,1,2,3)]
 row.names(Summary) <- NULL
 
 # Write to csv
-write.csv(Summary, "Number of recorded, blank, and no-records for each characteristic.csv", row.names=F)
+# write.csv(Summary, "Number of recorded, blank, and no-records for each characteristic.csv", row.names=F)
 
 ################################################################################
 ### Investigate missing data by characteristic (long format)####################
@@ -200,7 +200,7 @@ pw_char2 <- pw2 %>%
   mutate_if(is.logical, as.character)
 
 # Mark data with no row records
-pw_char2[pw2==1] <- ""
+pw_char2[pw2==T] <- ""
 pw_char2[pw2==F] <- "Blank"
 pw_char2[is.na(pw2)] <- "No record"
 
@@ -295,7 +295,13 @@ pw_coms2 <- pw_coms[
 ]
 
 # Write to csv
-write.csv(pw_coms2, "Long table of blanks and no-records.csv", na="", row.names=F)
+# write.csv(pw_coms2, "Long table of blanks and no-records.csv", na="", row.names=F)
+
+# Identify number of associated records
+export <- pw_coms2 %>% group_by(ActivityStartDate) %>% summarise(n=n()) 
+export <- export[order(export$n,decreasing=T),]
+colnames(export) <- c("ActivityStartDate","Number of missing records that day")
+# write.csv(export, "Counts of missing records.csv", row.names=F)
 
 ################################################################################
 ### Plot by characteristics presence/absence ###################################
@@ -352,8 +358,8 @@ b <- b + geom_point(aes(y=Present),shape=1,stroke=0.25) +
   facet_wrap(vars(CharacteristicName))
 
 # Save plotly to html
-saveWidget(ggplotly(a), file = "Characteristic time series A.html",background='r')
-saveWidget(ggplotly(b), file = "Characteristic time series B.html",background='r')
+# saveWidget(ggplotly(a), file = "Characteristic time series A.html",background='r')
+# saveWidget(ggplotly(b), file = "Characteristic time series B.html",background='r')
 
 
 ################################################################################
@@ -365,9 +371,11 @@ wdata$`QC Determination` <- NA
 wdata$`QC Determination`[wdata$Flag..outside.20.80.quantiles.==1] <- "OOR"
 
 # Assign QC Determination and remove unneeded columns
-wdata_join <- full_join(wdata, pw_coms2[1:4], by=c("ActivityMediaSubdivisionName", "CharacteristicName"))
+wdata_join <- full_join(wdata, pw_coms2[,c("ActivityMediaSubdivisionName", "CharacteristicName","Status")], by=c("ActivityMediaSubdivisionName", "CharacteristicName"))
 wdata_join$`QC Determination`[!is.na(wdata_join$Status)] <- wdata_join$Status[!is.na(wdata_join$Status)]
+wdata_join$`QC Determination`[wdata_join$ResultMeasureValue=="" & wdata_join$MonitoringLocationIdentifier !=""] <- "Blank"
 wdata_qc <- wdata_join[!colnames(wdata_join) %in% c("Month","Flag..outside.20.80.quantiles.","Status")]
 
 # Save to csv file
 write.csv(wdata_qc, paste(fileName,"_QC_Determination.csv",sep=""), na="", row.names=F)
+# write.csv(wdata_qc, paste("C:/GIS/", fileName,"_QC_Determination.csv",sep=""), na="", row.names=F) # Temporary local address since big
