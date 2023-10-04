@@ -386,6 +386,10 @@ pw3 <- pw3 %>%
 # Change NA to False
 pw3[is.na(pw3)] <- 0
 
+# Order alphabetically by CharacteristicName
+pw3 <- pw3[c(1,2,order(colnames(pw3[3:length(pw3)]))+2)]
+print(colnames(pw3)[3:length(pw3)])
+
 # Pivot back longer with the "no record" rows now included (split panels between 2 figures)
 pw4 <- pw3[1:18] %>%
   pivot_longer(!c(ActivityMediaSubdivisionName, ActivityStartDate),
@@ -397,10 +401,15 @@ pw5 <- pw3[c(1,2,19:35)] %>%
                names_to = "CharacteristicName",
                values_to = "Present")
 
+pw6 <- pw3[c(1,2,36:length(pw3))] %>%
+  pivot_longer(!c(ActivityMediaSubdivisionName, ActivityStartDate),
+               names_to = "CharacteristicName",
+               values_to = "Present")
+
 # Shorten names
 pw4$CharacteristicName <- substr(pw4$CharacteristicName,1,25)
 pw5$CharacteristicName <- substr(pw5$CharacteristicName,1,25)
-
+pw6$CharacteristicName <- substr(pw6$CharacteristicName,1,25)
 
 # Create ggplot for first figure
 a <- ggplot(pw4, aes(x=ActivityStartDate, z=ActivityMediaSubdivisionName))
@@ -412,10 +421,15 @@ b <- ggplot(pw5, aes(x=ActivityStartDate, z=ActivityMediaSubdivisionName))
 b <- b + geom_point(aes(y=Present),shape=1,stroke=0.25) +
   facet_wrap(vars(CharacteristicName))
 
-# Save plotly to html
-# saveWidget(ggplotly(a), file = "Characteristic time series A.html",background='r')
-# saveWidget(ggplotly(b), file = "Characteristic time series B.html",background='r')
+# Create ggplot for third figure
+c <- ggplot(pw6, aes(x=ActivityStartDate, z=ActivityMediaSubdivisionName))
+c <- c + geom_point(aes(y=Present),shape=1,stroke=0.25) +
+  facet_wrap(vars(CharacteristicName))
 
+# Save plotly to html
+saveWidget(ggplotly(a), file = "Characteristic time series A.html",background='r')
+saveWidget(ggplotly(b), file = "Characteristic time series B.html",background='r')
+saveWidget(ggplotly(c), file = "Characteristic time series C.html",background='r')
 
 ################################################################################
 ### Update EDD dataset with QC Determination column#############################
