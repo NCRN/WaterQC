@@ -294,54 +294,18 @@ pw_coms2 <- pw_coms[
      pw_coms$ActivityStartDate >= as.Date("2013-12-05"))),
 ]
 
-# Read site_checklist.xlsx and extract Dates to Enter ##########################
+### Remove activities that overlap with Nick's PDF search results
 
-# Load packages
-library(readxl)
-library(openxlsx)
+# Load missing dates list
+Dates.to.Enter <- read.csv("20231004_missing_sites.csv") # Supplied by Charlie
+Dates.to.Enter$formatted_date <- as.Date(Dates.to.Enter$formatted_date, format="%Y-%m-%d")
 
-# Name Excel file
-fileName <- "site_checklist.xlsx"
-
-# Get sheet names
-sheet_names <- excel_sheets(fileName)
-
-# Create blank list
-spreadsheet <- list()
-
-# Go through sheets
-for (i in 1:(length(sheet_names)-1)){ # Number of sheets minus metadata sheet
-  spreadsheet[[i]] <- read.xlsx(fileName, sheet=i)
-}
-
-
-# Create blank data frame
-Dates.to.Enter <- data.frame(MonitoringLocationIdentifier=NULL, ActivityStartDate=NULL)
-
-# Extract Dates to Enter column
-for (j in 1:length(spreadsheet)){
-  
-  # If there is a Dates to Enter column
-  if (!is.null(spreadsheet[[j]]$Dates.to.Enter)){
-    temp <- data.frame(MonitoringLocationIdentifier=sheet_names[j], 
-                       ActivityStartDate=as.Date(spreadsheet[[j]]$Dates.to.Enter, format="%Y-%m-%d",
-                                                 origin="1899-12-30"))
-    temp <- temp[!is.na(temp$ActivityStartDate),]
-    Dates.to.Enter <- rbind(Dates.to.Enter, temp)
-  }
-}
-################################################################################
-
-# Remove activities that overlap with Nick's PDF search results
+# Loop to remove activities
 pw_coms3 <- pw_coms2
 for (i in 1:nrow(Dates.to.Enter)){
   for (j in 1:nrow(pw_coms2)){
-    if (Dates.to.Enter$MonitoringLocationIdentifier[i] == pw_coms2$MonitoringLocationIdentifier[j] &
-        Dates.to.Enter$ActivityStartDate[i] == pw_coms2$ActivityStartDate[j]){
-        # pw_coms2$CharacteristicName[j] %in% c("Conductivity", "Salinity", "pH",
-        #                                       "Temperature, water", "Dissolved oxygen (DO)",
-        #                                       "Dissolved oxygen saturation", "Specific conductance",
-        #                                       "Barometric pressure","Solids, Dissolved (TDS)")){
+    if (Dates.to.Enter$Location_ID[i] == pw_coms2$MonitoringLocationIdentifier[j] &
+        Dates.to.Enter$formatted_date[i] == pw_coms2$ActivityStartDate[j]){
       pw_coms3[j,] <- NA
     }
   }
