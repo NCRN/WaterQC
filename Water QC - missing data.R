@@ -18,13 +18,13 @@ library(plotly)
 library(htmlwidgets)
 
 # Set working directory
-# setwd("R:/NPS_NCRN_VitalSigns/Analyses/Projects/New WQ data/")
+setwd("R:/NPS_NCRN_VitalSigns/Analyses/Projects/New WQ data/")
 
 # Read readme
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20230925_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20231003_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,".csv",sep=""))
 
 # Format dates as date
@@ -294,14 +294,69 @@ pw_coms2 <- pw_coms[
      pw_coms$ActivityStartDate >= as.Date("2013-12-05"))),
 ]
 
+# Read site_checklist.xlsx and extract Dates to Enter ##########################
+
+# Load packages
+library(readxl)
+library(openxlsx)
+
+# Name Excel file
+fileName <- "site_checklist.xlsx"
+
+# Get sheet names
+sheet_names <- excel_sheets(fileName)
+
+# Create blank list
+spreadsheet <- list()
+
+# Go through sheets
+for (i in 1:(length(sheet_names)-1)){ # Number of sheets minus metadata sheet
+  spreadsheet[[i]] <- read.xlsx(fileName, sheet=i)
+}
+
+
+# Create blank data frame
+Dates.to.Enter <- data.frame(MonitoringLocationIdentifier=NULL, ActivityStartDate=NULL)
+
+# Extract Dates to Enter column
+for (j in 1:length(spreadsheet)){
+  
+  # If there is a Dates to Enter column
+  if (!is.null(spreadsheet[[j]]$Dates.to.Enter)){
+    temp <- data.frame(MonitoringLocationIdentifier=sheet_names[j], 
+                       ActivityStartDate=as.Date(spreadsheet[[j]]$Dates.to.Enter, format="%Y-%m-%d",
+                                                 origin="1899-12-30"))
+    temp <- temp[!is.na(temp$ActivityStartDate),]
+    Dates.to.Enter <- rbind(Dates.to.Enter, temp)
+  }
+}
+################################################################################
+
+# Remove activities that overlap with Nick's PDF search results
+pw_coms3 <- pw_coms2
+for (i in 1:nrow(Dates.to.Enter)){
+  for (j in 1:nrow(pw_coms2)){
+    if (Dates.to.Enter$MonitoringLocationIdentifier[i] == pw_coms2$MonitoringLocationIdentifier[j] &
+        Dates.to.Enter$ActivityStartDate[i] == pw_coms2$ActivityStartDate[j]){
+        # pw_coms2$CharacteristicName[j] %in% c("Conductivity", "Salinity", "pH",
+        #                                       "Temperature, water", "Dissolved oxygen (DO)",
+        #                                       "Dissolved oxygen saturation", "Specific conductance",
+        #                                       "Barometric pressure","Solids, Dissolved (TDS)")){
+      pw_coms3[j,] <- NA
+    }
+  }
+}
+
+pw_coms3 <- pw_coms3[!is.na(pw_coms3$MonitoringLocationIdentifier),]
+
 # Write to csv
-# write.csv(pw_coms2, "Long table of blanks and no-records.csv", na="", row.names=F)
+write.csv(pw_coms3, "Long table of blanks and no-records.csv", na="", row.names=F)
 
 # Identify number of associated records
-export <- pw_coms2 %>% group_by(ActivityStartDate) %>% summarise(n=n()) 
+export <- pw_coms3 %>% group_by(ActivityStartDate) %>% summarise(n=n()) 
 export <- export[order(export$n,decreasing=T),]
 colnames(export) <- c("ActivityStartDate","Number of missing records that day")
-# write.csv(export, "Counts of missing records.csv", row.names=F)
+write.csv(export, "Counts of missing records.csv", row.names=F)
 
 ################################################################################
 ### Plot by characteristics presence/absence ###################################
@@ -379,3 +434,4 @@ wdata_qc <- wdata_join[!colnames(wdata_join) %in% c("Month","Flag..outside.20.80
 # Save to csv file
 write.csv(wdata_qc, paste(fileName,"_QC_Determination.csv",sep=""), na="", row.names=F)
 # write.csv(wdata_qc, paste("C:/GIS/", fileName,"_QC_Determination.csv",sep=""), na="", row.names=F) # Temporary local address since big
+
