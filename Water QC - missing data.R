@@ -297,7 +297,7 @@ pw_coms2 <- pw_coms[
 ### Remove activities that overlap with Nick's PDF search results
 
 # Load missing dates list
-Dates.to.Enter <- read.csv("20231004_missing_sites.csv") # Supplied by Charlie
+Dates.to.Enter <- read.csv("20231005_missing_sites.csv") # Supplied by Charlie
 Dates.to.Enter$formatted_date <- as.Date(Dates.to.Enter$formatted_date, format="%Y-%m-%d")
 
 # Loop to remove activities
@@ -394,6 +394,23 @@ c <- c + geom_point(aes(y=Present),shape=1,stroke=0.25) +
 saveWidget(ggplotly(a), file = "Characteristic time series A.html",background='r')
 saveWidget(ggplotly(b), file = "Characteristic time series B.html",background='r')
 saveWidget(ggplotly(c), file = "Characteristic time series C.html",background='r')
+
+################################################################################
+### Count number of characteristics for each activity ##########################
+################################################################################
+
+# Summarize characteristics
+chars5 <- wqdata %>%
+  group_by(ActivityMediaSubdivisionName) %>%
+  group_by(ActivityStartDate, .add=T) %>%
+  summarise(`Count of characteristics` = length(unique(CharacteristicName))) # All unique characteristics, including blanks
+
+chars5 <- arrange(chars5, chars5$ActivityStartDate)
+
+# Plot it
+windows(6.5,6.5)
+plot(chars5$ActivityStartDate, chars5$`Count of characteristics`, xlab="Date", ylab="Number of characteristics per activity")
+
 
 ################################################################################
 ### Update EDD dataset with QC Determination column#############################
