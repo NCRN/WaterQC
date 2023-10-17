@@ -62,7 +62,7 @@ wqdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water moni
 # Choose WQ columns
 wqdata <- wqdata[c("ActivityStartDate", "MonitoringLocationIdentifier", "CharacteristicName",
                    "ResultMeasureValue", "MeasureQualifierCode", "ResultValueTypeName",
-                   "LaboratoryName")]
+                   "LaboratoryName", "ResultCommentText")]
 
 # Choose lab columns
 labDataNew <- labDataNew[c("New.LocID", "Sample.Date", "Received.Date", "Analysis.Date", "Parameter", "Result")]
