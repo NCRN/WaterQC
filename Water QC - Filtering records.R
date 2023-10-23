@@ -25,17 +25,16 @@ fileName <- "20231003_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,".csv",sep=""))
 
 # Read lab data
-labDataNew <- read.xlsx("NCRN_Water_New_Nutrient_Data_20231002.xlsx")
-# labDataNew <- read.csv("NCRN_Water_New_Nutrient_Data_20231002.csv")
+labDataNew <- read.xlsx("NCRN_Water_New_Nutrient_Data_20231019.xlsx")
 labDataNew$Sample.Date <- as.Date(labDataNew$Sample.Date, origin="1899-12-30")
 labDataNew$Received.Date <- as.Date(labDataNew$Received.Date, origin="1899-12-30")
 labDataNew$Analysis.Date <- as.Date(labDataNew$Analysis.Date, origin="1899-12-30")
 
-lab20160926 <- read.xlsx("NCRN CBL NPStoret Import_20160926_20161004.xlsx")
-lab20160926$Sample.Date <- as.Date(lab20160926$Sample.Date, origin="1899-12-30")
-
-lab20161017 <- read.xlsx("NCRN CBL NPStoret Import_20161017_20161018.xlsx")
-lab20161017$Sample.Date <- as.Date(lab20161017$Sample.Date, origin="1899-12-30")
+# lab20160926 <- read.xlsx("NCRN CBL NPStoret Import_20160926_20161004.xlsx")
+# lab20160926$Sample.Date <- as.Date(lab20160926$Sample.Date, origin="1899-12-30")
+# 
+# lab20161017 <- read.xlsx("NCRN CBL NPStoret Import_20161017_20161018.xlsx")
+# lab20161017$Sample.Date <- as.Date(lab20161017$Sample.Date, origin="1899-12-30")
 
 # Format dates as date
 # wdata$ActivityStartDate <- as.Date(wdata$ActivityStartDate)
@@ -73,7 +72,8 @@ labDataNew$Result <- round(as.numeric(labDataNew$Result),4)
 ################################################################################
 
 # Problem 1: TP and TN records for 3 sites are duplicated 2018-06-25 and 2018-06-26.
-#            However, only the 06-26 ones all match the lab report. And, the 06-25 ones were sent to the lab in June 2019, a year later.
+#            However, only the 06-26 ones all match the lab report. And, the 06-25 ones were sent to the lab 
+# in June 2019, a year later.
 wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_NACE_HECR", "NCRN_NACE_OXRU", "NCRN_NACE_STCK") &
                   ActivityStartDate=="2018-06-25" &
                   CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
@@ -87,7 +87,7 @@ labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_HECR", "NCRN_NACE_OXRU", "NCRN
 
 # Upon looking at June 2019 records, it seems that there were no TN or TP for those NACE
 # sites that were monitored 2019-06-25. Thus, I assume that those NACE samples from
-# 2018-06-25 actually belong in 2019-06-25
+# 2018-06-25 actually belong in 2019-06-25 - Thus, this still needs to be fixed as of 2023_10_23
 
 labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_HECR", "NCRN_NACE_OXRU", "NCRN_NACE_STCK") &
                         Sample.Date == "2019-06-25" &
@@ -107,7 +107,10 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_CATO_BLBZ") &
                     ActivityStartDate=="2016-10-04" &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
 
-lab20160926 %>% filter(Sample.ID %in% c("NCRN_CATO_WHST") &
+labDataNew %>% filter(New.LocID %in% c("NCRN_CATO_BLBZ") &
+                        Sample.Date == "2016-09-26") # The new 20231019 nutrient import solves this 
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_CATO_BLBZ") &
                         Sample.Date == "2016-10-04")
 # Solution 2: Delete the 2016-09-26 CATO_BLBZ TN and TP records, as they are already in 2016-10-04.
 
@@ -129,7 +132,12 @@ labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_HECR", "NCRN_NACE_STCK") &
                         Sample.Date == "2020-11-04" &
                         Parameter %in% c("TN","TP", "ANC"))
 
-# Solution 3: Move 2020-11-04 ANC, TP, and TN for NACE_HECR and NACE_STCK to 2020-10-28
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_HECR", "NCRN_NACE_STCK") &
+                        Sample.Date == "2020-10-28" &
+                        Parameter %in% c("TN","TP", "ANC"))
+
+# Solution 3: Move 2020-11-04 ANC, TP, and TN for NACE_HECR and NACE_STCK to 2020-10-28. 
+# Thus, this still needs to be fixed as of 2023_10_23.
 
 
 ################################################################################
@@ -147,14 +155,14 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_GWMP_MIRU") &
 # The lab import correctly says 10-17. However, these somehow ended up in the EDD database as 10-16.
 # Plus, there is an 3rd CBL record in the database for 10-17 (TP=0.0158) which doesn't exist in the lab import.
 labDataNew %>% filter(New.LocID %in% c("NCRN_GWMP_MIRU") &
-                        Sample.Date == "2017-10-17" &
-                        Parameter %in% c("TN","TP"))
+                        Sample.Date == "2017-10-17")
 
 # Though there is a 2017-10-17 MIRU TP lab dup =0.0158 in the raw CBL data (NPS_NCRN_101917.xlsx), as well as a MIRU TN=0.77 lab dup.
 
 # Solution 4: The best I can come up with would be to remove the 2017-10-16 MIRU TN and TP from the EDD.
 #             Then, remove the 2017-10-17 MIRU TP=0.0158 from the EDD. Though there could be broader
-#             questions for consistency of when and how lab dup's are included.
+#             questions for consistency of when and how lab dup's are included. Perhaps using the new
+#             nutrients import will solve this.
 
 
 ################################################################################
@@ -169,10 +177,13 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_GWMP_MIRU") &
                     ActivityStartDate=="2016-10-17" &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
 
-lab20161017 %>% filter(Sample.ID %in% c("NCRN_GWMP_MIRU") &
+labDataNew %>% filter(New.LocID %in% c("NCRN_GWMP_MIRU") &
                         Sample.Date == "2016-10-17")
 
-# Solution 5: Delete the 2018-10-18 MIRU TN and TP from the EDD.
+labDataNew %>% filter(New.LocID %in% c("NCRN_GWMP_MIRU") &
+                        Sample.Date == "2016-10-18")
+
+# Solution 5: Delete the 2018-10-18 MIRU TN and TP from the EDD. (should happen automatically with new nutrient import)
 
 
 ################################################################################
@@ -187,6 +198,12 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_ROCR_PHBR", "ROCR_RO
                     ActivityStartDate=="2017-04-18"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
 
+labDataNew %>% filter(New.LocID %in% c("NCRN_ROCR_PHBR", "ROCR_ROC3") &
+                        Sample.Date == "2017-04-17")
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_ROCR_PHBR", "ROCR_ROC3") &
+                        Sample.Date == "2017-04-18")
+
 # Solution 6: The 2017-04-17 TN and TP data for PHBR and ROCR can be deleted.
 
 ################################################################################
@@ -199,6 +216,10 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_ROCR_LUBR") &
 wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_ROCR_LUBR") &
                     ActivityStartDate=="2018-06-12"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_ROCR_LUBR") &
+                        Sample.Date == "2018-06-11" &
+                        Parameter %in% c("TN","TP"))
 
 labDataNew %>% filter(New.LocID %in% c("NCRN_ROCR_LUBR") &
                         Sample.Date == "2018-06-12" &
@@ -220,6 +241,11 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_NACE_STCK") &
                     ActivityStartDate=="2017-04-17"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
 
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_STCK") &
+                        Sample.Date == "2017-04-17")
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_STCK") &
+                        Sample.Date == "2017-04-18")
 # Solution 8 - Remove NACE_STCK TN and TP from 2017-04-18. Also, this is related
 #              to Problem #6 and the QAQC mis-dating mentioned above.
 
@@ -229,10 +255,35 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_NACE_STCK") &
 # YSI and lab for ROCR_NOST, ROCR_DUOA, ROCR_ROC3; and TN and TP for ROCR_PHBR.
 wqdata %>% filter(ActivityStartDate=="2017-07-24"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
-# Solution: I'll have to see the PDF datasheets for this one. I'm not sure which
-# day each belong. The lab results in "NCRN CBL NPStoret Import_20170717_20170718_20170725"
-# have mixed dates too. It appears the NACE_OXRU ones can be deleted because they
-# exist in 2017-07-18.
+
+wqdata %>% filter(ActivityStartDate=="2017-07-17"  &
+                    CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+wqdata %>% filter(ActivityStartDate=="2017-07-18"  &
+                    CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+wqdata %>% filter(ActivityStartDate=="2007-07-24"  &
+                    CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+# PDF datasheets: 
+# GWMP_PIRU 2017-07-24 is a datasheet filename, but the handwritten date is 2007-07-24
+# NACE_OXRU 2017-07-24 was actually sampled 2017-07-18.
+# ROCR_NOST 2017-07-24 is real.
+# ROCR_DUOA 2017-07-24 is real.
+# ROCR_ROC3 2017-07-24 is real.
+# ROCR_PHBR 2017-07-24 was actually sampled 2017-07-17.
+
+# Lab results
+labDataNew %>% filter(Sample.Date == "2017-07-24") # No lab results for 2017-07-24
+labDataNew %>% filter(Sample.Date == "2017-07-17") # ROCR_PHBR results here (matches datasheet)
+labDataNew %>% filter(Sample.Date == "2017-07-18") # NACE_OXRU results here (matches datasheet)
+
+# I think the new lab import should solve the NACE_OXRU and ROCR_PHBR issues here.
+# For GWMP_PIRU, my best guess is that the PDF datasheets and lab results both have
+# the wrong date: the lab results should be 2017-07-18, and the datasheet is a duplicate of 2007-07-24
+# For ROCR_NOST, DUOA, and ROCR, I think they should be 2017-07-17, but then why does
+# the datasheet say 2017-07-24? I'm not sure.
+
 
 ################################################################################
 
@@ -245,9 +296,13 @@ wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_NACE_OXRU") &
 wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_NACE_OXRU") &
                     ActivityStartDate=="2017-07-18"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_OXRU") &
+                        Sample.Date == "2017-07-17")
+
 # Solution: The rest of the YSI data for NACE_OXRU are on 2017-07-18, so I believe
 # these lab QC records belong there. However, they are already there, so the OXRU
-# TN and TP for 2017-07-17 can be deleted.
+# TN and TP for 2017-07-17 can be deleted. (the new nutrient import seems to solve this)
 
 ################################################################################
 
@@ -261,9 +316,13 @@ labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_OXRU") &
                         Sample.Date == "2018-04-09" &
                         Parameter %in% c("TN","TP"))
 
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_OXRU") &
+                        Sample.Date == "2018-04-10" &
+                        Parameter %in% c("TN","TP"))
+
 # Solution: The 04-10 samples are lab QAQC spikes that were entered in the wrong 
-# date, following the same pattern as most of the above. Should we just remove
-# lab QAQC data from the database?
+# date, following the same pattern as most of the above. Using the new nutrient
+# import should solve this.
 
 ################################################################################
 
@@ -271,7 +330,15 @@ labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_OXRU") &
 wqdata %>% filter(MonitoringLocationIdentifier %in% c("NCRN_GWMP_TURU") &
                     ActivityStartDate=="2017-01-30"  &
                     CharacteristicName %in% c("Total Phosphorus, mixed forms", "Total Nitrogen, mixed forms"))
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_STCK") &
+                        Sample.Date == "2017-04-17")
+
+labDataNew %>% filter(New.LocID %in% c("NCRN_NACE_STCK") &
+                        Sample.Date == "2017-04-18")
+
 # Solution: These are lab QAQC spike data entered in the wrong date. Since so many
 # errors are because of this, it may make sense to just remove the lab QC data from
 # the dataset, since it's kinda extra, and then run the missing data check again.
-# This could allow more precise identification of other errors.
+# This could allow more precise identification of other errors. (Note: the new nutrient
+# import appears to solve this)
