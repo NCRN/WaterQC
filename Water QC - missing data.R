@@ -24,7 +24,7 @@ setwd("R:/NPS_NCRN_VitalSigns/Analyses/Projects/New WQ data/")
 # readLines("readme.txt")
 
 # Read data
-fileName <- "20231003_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+fileName <- "20231031_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
 wdata <- read.csv(paste(fileName,".csv",sep=""))
 
 # Format dates as date
@@ -399,11 +399,13 @@ saveWidget(ggplotly(c), file = "Characteristic time series C.html",background='r
 ### Count number of characteristics for each activity ##########################
 ################################################################################
 
+mark_offs <- read.csv("20231006_mark_offs.csv")
+
 # Summarize characteristics
-chars5 <- wqdata %>%
+chars5 <- wqdata[!wqdata$ActivityMediaSubdivisionName %in% mark_offs$ActivityMediaSubdivisionName,] %>%
   group_by(ActivityMediaSubdivisionName) %>%
   group_by(ActivityStartDate, .add=T) %>%
-  summarise(`Count of characteristics` = length(unique(CharacteristicName))) # All unique characteristics, including blanks
+  summarise(`Count of characteristics` = length(unique(CharacteristicName[ResultMeasureValue != ""]))) # All unique characteristics
 
 chars5 <- arrange(chars5, chars5$ActivityStartDate)
 
@@ -411,6 +413,11 @@ chars5 <- arrange(chars5, chars5$ActivityStartDate)
 windows(6.5,6.5)
 plot(chars5$ActivityStartDate, chars5$`Count of characteristics`, xlab="Date", ylab="Number of characteristics per activity")
 
+# Plot it with ggplotly
+# Create ggplot for first figure
+d <- ggplot(chars5, aes(x=ActivityStartDate, z=ActivityMediaSubdivisionName))
+d <- d + geom_point(aes(y=`Count of characteristics`),shape=1,stroke=0.25)
+saveWidget(ggplotly(d), file = "Number of characteristics per activity - blanks and mark-offs removed.html",background='r')
 
 ################################################################################
 ### Update EDD dataset with QC Determination column#############################
@@ -427,6 +434,5 @@ wdata_join$`QC Determination`[wdata_join$ResultMeasureValue=="" & wdata_join$Mon
 wdata_qc <- wdata_join[!colnames(wdata_join) %in% c("Month","Flag..outside.20.80.quantiles.","Status")]
 
 # Save to csv file
-write.csv(wdata_qc, paste(fileName,"_QC_Determination.csv",sep=""), na="", row.names=F)
+# write.csv(wdata_qc, paste(fileName,"_QC_Determination.csv",sep=""), na="", row.names=F)
 # write.csv(wdata_qc, paste("C:/GIS/", fileName,"_QC_Determination.csv",sep=""), na="", row.names=F) # Temporary local address since big
-
