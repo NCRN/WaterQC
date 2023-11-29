@@ -1,0 +1,34 @@
+SoftConstraints_name,CharacteristicName,Type
+Location_ID,MonitoringLocationIdentifier,NA
+water_temperature_soft_constraint_low,"Temperature, water",low
+water_temperature_soft_constraint_high,"Temperature, water",high
+barometric_pressure_soft_constraint_low,Barometric pressure,low
+barometric_pressure_soft_constraint_high,Barometric pressure,high
+conductivity_soft_constraint_low,Conductivity,low
+conductivity_soft_constraint_high,Conductivity,high
+specific_conductance_soft_constraint_low,Specific conductance,low
+specific_conductance_soft_constraint_high,Specific conductance,high
+turbidity_soft_constraint_low,Turbidity,low
+turbidity_soft_constraint_high,Turbidity,high
+salinity_soft_constraint_low,Salinity,low
+salinity_soft_constraint_high,Salinity,high
+ph_soft_constraint_low,pH,low
+ph_soft_constraint_high,pH,high
+do_concentration_soft_constraint_low,Dissolved oxygen (DO),low
+do_concentration_soft_constraint_high,Dissolved oxygen (DO),high
+do_saturation_soft_constraint_low,Dissolved oxygen saturation,low
+do_saturation_soft_constraint_high,Dissolved oxygen saturation,high
+wetted_width_soft_constraint_low,Wetted Width,low
+wetted_width_soft_constraint_high,Wetted Width,high
+discharge_soft_constraint_low,Base flow discharge,low
+discharge_soft_constraint_high,Base flow discharge,high
+mean_velocity_soft_constraint_low,RBP Stream Velocity,low
+mean_velocity_soft_constraint_high,RBP Stream Velocity,high
+mean_crossection_depth_soft_constraint_low,Cross-Section Depth,low
+mean_crossection_depth_soft_constraint_high,Cross-Section Depth,high
+anc_soft_constraint_low,Acid Neutralizing Capacity (ANC),low
+anc_soft_constraint_high,Acid Neutralizing Capacity (ANC),high
+tn_soft_constraint_low,"Total Nitrogen, mixed forms",low
+tn_soft_constraint_high,"Total Nitrogen, mixed forms",high
+tp_soft_constraint_low,"Total Phosphorus, mixed forms",low
+tp_soft_constraint_high,"Total Phosphorus, mixed forms",high
