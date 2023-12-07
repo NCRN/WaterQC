@@ -121,7 +121,7 @@ sites <- data.frame(Location_ID = s_con[,1])
 s_con_filled <- left_join(sites, sorted, by="Location_ID")
 
 # Write as csv
-# write.csv(s_con_filled,"SoftConstraints-filled 10-90.csv",row.names=F, quote=F)
+# write.csv(s_con_filled,"SoftConstraints-filled by-site 10-90.csv",row.names=F, quote=F)
 
 
 
@@ -209,9 +209,9 @@ sorted <- lowHigh[,colnames(s_con2)]
 
 # Fill soft constraints table
 sites <- data.frame(Location_ID = s_con[,1])
-sites_mon <- data.frame(Location_ID = rep(sites$Location_ID,each=12,times=nrow(sites)),
+sites_mon <- data.frame(Location_ID = rep(sites$Location_ID,each=12),
                         Month = rep(1:12,times=nrow(sites)))
 s_con_filled <- left_join(sites_mon, sorted, by=c("Location_ID","Month"))
 
 # Write as csv
-# write.csv(s_con_filled,"SoftConstraints-filled by month 10-90.csv",row.names=F, quote=F)
+# write.csv(s_con_filled,"SoftConstraints-filled by-site-month 10-90.csv",row.names=F, quote=F)
