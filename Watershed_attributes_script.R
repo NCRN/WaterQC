@@ -93,6 +93,9 @@ sheds_table <- data.frame(
   Notes = NA
 )
 
+# Fix PRWI_NOCH name
+sheds_table$NEW_NAME[sheds_table$IMLOCID_Water=="NCRN_PRWI_NOCH"] <- "North Branch Chopawamsic Below Confluence with Middle Branch"
+
 # Watershed info
 sheds_table$MonitoringLocationIdentifier <- paste("11NPSWRD_WQX-", sheds_table$IMLOCID_Water, sep="")
 
@@ -103,7 +106,7 @@ sheds_table$Longitude <- temp$LONGITUDE
 
 # Combined name
 sheds_table$MonitoringLocationIdentifier_IMLOCID_Water_Latitude_Longitude <-
-  paste('"',sheds_table$MonitoringLocationIdentifier, sheds_table$IMLOCID_Water, sheds_table$Latitude, sheds_table$Longitude, '"',sep=",")
+  paste('"',sheds_table$MonitoringLocationIdentifier,",", sheds_table$IMLOCID_Water, ",",sheds_table$Latitude, ",",sheds_table$Longitude, '"',sep="")
 
 ### Calculate attributes #######################################################
 # Watershed areas
@@ -135,6 +138,9 @@ temp <- left_join(sheds_table, streams_poly, by="IMLOCID_Water")
 sheds_table$Stream_Miles_in_Watershed <- temp$miles
 sheds_table$Stream_Order <- temp$order
 sheds_table$Stream_Order[is.infinite(sheds_table$Stream_Order)] <- 1 # Fill in any small stream gaps
+
+# Fix CATO_SVSR (should be 4th order not 5th)
+sheds_table$Stream_Order[sheds_table$IMLOCID_Water=="NCRN_CHOH_SVSR"] <- 4
 
 # Land cover (takes a few minutes)
 trees_area <- NA
@@ -311,4 +317,4 @@ sheds_table$Years_Monitored_by_NCRN <- temp2$years_mon
 
 
 ### Save as csv ################################################################
-write.csv(sheds_table, "NCRN-Water-Sites-Analysis_2024_01_05.csv", row.names=F, quote = F)
+write.csv(sheds_table, "NCRN-Water-Sites-Analysis_2024_01_17.csv", row.names=F, quote = F)
