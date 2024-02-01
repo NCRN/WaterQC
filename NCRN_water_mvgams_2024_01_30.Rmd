@@ -1,0 +1,484 @@
+---
+title: "NCRN_water_mvgams.rmd"
+author: "Dan Myers"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+This script makes MGVAM models for NCRN water data and demonstrates some plots. Place it in the same directory as the NCRN water data (e.g., 20231128_wqp_wqx_bss_wq_npsncrn.csv) and run it. It shouldn't need anything besides the packages below and the NCRN water dataset, except for the mapping section which brings in GIS data.
+
+Tutorials it's based on: <https://rpubs.com/NickClark47/mvgam2>, <https://github.com/nicholasjclark/mvgam>
+
+## Load packages
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Install packages
+# devtools::install_github("nicholasjclark/mvgam")
+# install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+# cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+# install_cmdstan()
+
+# Load packages
+library(mvgam)
+library(cmdstanr)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(xts)
+library(ggplot2)
+library(sf)
+```
+
+## Format NCRN data for mvgam
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Read NCRN water data
+fileName <- "20240129_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
+wdata <- read.csv(paste(fileName,".csv",sep=""))
+
+# Format dates as date
+wdata$ActivityStartDate <- as.Date(wdata$ActivityStartDate)
+
+# Save character results for later
+char_results <- wdata$ResultMeasureValue
+
+# Format result as numeric
+wdata$ResultMeasureValue <- as.numeric(wdata$ResultMeasureValue)
+
+# Remove extra rows
+wdata <- wdata[wdata$ProjectIdentifier=="USNPS NCRN Perennial stream water monitoring",]
+wdata <- wdata[!is.na(wdata$ResultMeasureValue),]
+wdata <- wdata[!wdata$CharacteristicName %in% c("Chlorine",
+                                                "Weather Condition (WMO Code 4501) (choice list)",                      
+                                                "RBP2, Low G, Riparian Vegetative Zone Width, Left Bank (choice list)", 
+                                                "RBP2, Low G, Riparian Vegetative Zone Width, Right Bank (choice list)"),]
+
+# Take average of multiple measurements across stream
+wdata_avgd <- wdata %>%
+  group_by(MonitoringLocationIdentifier) %>%
+  group_by(ActivityStartDate, .add=T) %>%
+  group_by(CharacteristicName, .add=T) %>%
+  summarise(ResultMeasureValue = median(ResultMeasureValue, na.rm=T)) # Changed from mean to median
+
+# Remove sites not currently monitored
+current_sites <- wdata_avgd %>%
+  group_by(MonitoringLocationIdentifier) %>%
+  summarise(start_date = min(ActivityStartDate, na.rm=T),
+            end_date = max(ActivityStartDate, na.rm=T))
+current_sites <- current_sites[year(current_sites$end_date)==2023,]
+wdata_avgd <- wdata_avgd[wdata_avgd$MonitoringLocationIdentifier %in% current_sites$MonitoringLocationIdentifier,]
+
+# Summarise annual-monthly medians
+wdata_avgd$Year <- year(wdata_avgd$ActivityStartDate)
+wdata_avgd$Month <- month(wdata_avgd$ActivityStartDate)
+mo_med_SC <- wdata_avgd[wdata_avgd$CharacteristicName=="Specific conductance",] %>%
+  group_by(MonitoringLocationIdentifier) %>%
+  group_by(Year, .add=T) %>%
+  group_by(Month, .add=T) %>%
+  summarise(medSC = median(ResultMeasureValue, na.rm=T)) %>%
+  pivot_wider(names_from = MonitoringLocationIdentifier, values_from = medSC)
+
+# Join so all months included
+ymo <- data.frame(Year=rep(2005:2023, each=12),
+                  Month=rep(1:12,by=19))
+mo_med_SC_all <- left_join(ymo, mo_med_SC,by=c("Year","Month"))
+
+# Set negative and zero values to one so gamma distribution would work
+mo_med_SC_all[mo_med_SC_all<1] <- 1
+
+# Convert to time series 2005-2023
+# series <- as.ts(mo_med_SC_all[,!(names(mo_med_SC_all)) %in% c("Year","Month")],
+#                 start=c(2005,1),frequency=12,calendar=T)
+
+dates <- seq(as.Date("2005-01-01"), length=nrow(mo_med_SC_all), by="month")
+series <- xts(mo_med_SC_all[,!(names(mo_med_SC_all)) %in% c("Year","Month")],order.by=dates)
+
+# Convert ts to mvgam format with 12 seasons per year (months). 
+datNCRN <- series_to_mvgam(series, freq=12, train_prop = 0.85)
+```
+
+## Make MVGAM model
+
+This set-up takes about 10 minutes on my computer. I reduced the amount of computation where noted to keep it small, but we could make it more powerful and time consuming when ready.
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Create mvgam model (takes a while with NCRN data)
+modNCRN <- mvgam(data = datNCRN$data_train,
+              newdata = datNCRN$data_test,
+              formula = y ~ s(series, bs = 're') +
+                s(season, bs = c('cc'),k=5) - 1, # k sets an upper limit to the smoothing computation. Higher k = longer simulation time. The tutorials vary it from 5 to 12, or don't specify (which could be higher)
+              knots = list(season = c(0.5, 12.5)), # I think knots are the outer bounds of the seasons
+              use_lv = TRUE,
+              n_lv = 6, # Increase this to include more dynamic factors (i.e., dimensions)
+              family = 'Gamma', # Consider setting to other distributions
+              use_stan = TRUE,
+              trend_model = 'RW',
+              chains = 12, # number of parallel processes
+              parallel=T,
+              burnin = 32, # Normally 300-500, lowered to speed up test run
+              samples = 32) # Normally 400-500, lowered to speed up test run
+```
+
+## Make plots of MVGAM model
+
+I commented out some of these plots, but feel free to uncomment them and check them out.
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Plot gam partial effect
+plot_mvgam_smooth(object = modNCRN, series = 1, smooth = 'season')
+
+# Plot factors
+# plot_mvgam_factors(modNCRN)
+
+# Plot the smoothing
+# mcmc_plot(modNCRN, variable = 'rho', regex = TRUE, type = 'trace')
+
+# Do posterior predictive check
+# ppc(modNCRN, series = 1, type = 'hist')
+
+# Examine CDF
+# ppc(modNCRN, series = 1, type = 'cdf')
+
+# Examine rootogram
+# ppc(modNCRN, series = 1, type = 'rootogram', n_bins = 25)
+
+# Examine smoothing of seasons
+# plot(modNCRN, type = 'smooths', residuals = TRUE)
+
+# Check out slopes
+# plot_mvgam_smooth(modNCRN, series = 1, 
+#                   smooth = 'season', 
+#                   derivatives = TRUE)
+
+# Plot effects on outcome scale
+# require(ggplot2)
+# plot_predictions(modNCRN, condition = 'season', points = 0.5) +
+#   theme_classic()
+
+# Plot posterior predictions over all time
+# plot(modNCRN, type = 'forecast', newdata = datNCRN$data_test)
+
+# Show first derivatives
+# plot_mvgam_trend(modNCRN, newdata = datNCRN$data_test, derivatives = TRUE)
+
+# Estimate components of uncertainty
+# plot_mvgam_uncertainty(modNCRN, newdata = datNCRN$data_test, legend_position = 'none')
+# text(1, 0.2, cex = 1.5, label="GAM component", 
+#      pos = 4, col="white", family = 'serif')
+# text(1, 0.9, cex = 1.5, label="Trend component", 
+#      pos = 4, col="white", family = 'serif')
+
+# Look at residuals
+plot(modNCRN, type = 'residuals')
+
+# Different distributions 
+# plot_mvgam_series(data = datNCRN$data_train, series = 'all')
+
+
+# Show summary without beta precisions
+# summary(modNCRN, include_betas = FALSE)
+
+# Plot hindcast and forecast distributions
+# layout(matrix(1:4, nrow = 2, byrow = TRUE))
+# for(i in 1:3){
+#   plot(modNCRN, type = 'forecast', series = i)
+# }
+# layout(matrix(1, nrow = 1, byrow = TRUE))
+
+
+# Plot time series
+# plot(series$NCRN_ANTI_SHCK, type = 'l', ylab = 'SC',
+#      xlab = 'Time', bty = 'l', lwd = 2)
+# box(bty = 'l', lwd  = 2)
+
+# Plot ACF (remove missing values)
+acf(series$NCRN_ANTI_SHCK[!is.na(series$NCRN_ANTI_SHCK)], main = '', bty = 'l', lwd = 2,
+    ci.col = 'darkred')
+box(bty = 'l', lwd  = 2)
+
+# Plot trend and season (remove missing values)
+plot(stl(ts(mo_med_SC_all$NCRN_GWMP_MIRU[!is.na(mo_med_SC_all$NCRN_GWMP_MIRU)], frequency = 12), s.window = 'periodic'),
+     lwd = 2, col.range = 'darkred')
+
+# Plot partial effects per site
+# plot_mvgam_randomeffects(modNCRN)
+```
+
+## Make plot of trend correlations between sites
+
+This one includes all years of data (2005-2023).
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Examine correlations among trends
+correlations <- lv_correlations(object = modNCRN)
+mean_correlations <- correlations$mean_correlations
+mean_correlations[upper.tri(mean_correlations)] <- NA
+mean_correlations <- data.frame(mean_correlations)
+
+# Make a new window since it's big
+# windows(15,15)
+
+# Correlations plot
+ggplot(mean_correlations %>%
+         tibble::rownames_to_column("series1") %>%
+         tidyr::pivot_longer(-c(series1), names_to = "series2", values_to = "Correlation"),
+       aes(x = series1, y = series2)) + geom_tile(aes(fill = Correlation)) +
+  scale_fill_gradient2(low="darkred", mid="white", high="darkblue",
+                       midpoint = 0,
+                       breaks = seq(-1,1,length.out = 5),
+                       limits = c(-1, 1),
+                       name = 'Trend\ncorrelation') + labs(x = '', y = '') + theme_dark() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+## Examine trends and correlations recently (2017-2023)
+
+This looks at correlations among recent trends, to help see if there are any impacts of recent deicing salt reduction plans, etc. It runs another MVGAM model on the more recent data, which takes a couple minutes.
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Extract recent samples
+mo_med_SC_rec <- mo_med_SC_all[mo_med_SC_all$Year>=2017,]
+dates2 <- seq(as.Date("2017-01-01"), length=nrow(mo_med_SC_rec), by="month")
+series2 <- xts(mo_med_SC_rec[,!(names(mo_med_SC_rec)) %in% c("Year","Month")],order.by=dates2)
+
+# Convert ts to mvgam format with one season per year (frequency(series)). 
+datNCRN2 <- series_to_mvgam(series2, freq=12, train_prop = 0.85)
+
+# Create mvgam model (takes a while with NCRN data)
+modNCRN2 <- mvgam(data = datNCRN2$data_train,
+              newdata = datNCRN2$data_test,
+              formula = y ~ s(series, bs = 're') +
+                s(season, bs = c('cc'), k = 5) - 1,
+              knots = list(season = c(0.5, 12.5)), # I think knots are the outer bounds of the seasons
+              use_lv = TRUE,
+              n_lv = 2, # Increase this to include more dynamic factors (i.e., dimensions)
+              family = 'Gamma', # Consider setting to other distributions
+              use_stan = TRUE,
+              trend_model = 'RW',
+              chains = 12, # number of parallel processes
+              parallel=T,
+              burnin = 32, # Normally 300-500, lowered to speed up test run
+              samples = 32) # Normally 400-500, lowered to speed up test run
+
+# Examine correlations among trends
+correlations2 <- lv_correlations(object = modNCRN2)
+mean_correlations2 <- correlations2$mean_correlations
+mean_correlations2[upper.tri(mean_correlations2)] <- NA
+mean_correlations2 <- data.frame(mean_correlations2)
+
+# Make a new window since it's big
+# windows(15,15)
+
+# Correlations plot
+ggplot(mean_correlations2 %>%
+         tibble::rownames_to_column("series1") %>%
+         tidyr::pivot_longer(-c(series1), names_to = "series2", values_to = "Correlation"),
+       aes(x = series1, y = series2)) + geom_tile(aes(fill = Correlation)) +
+  scale_fill_gradient2(low="darkred", mid="white", high="darkblue",
+                       midpoint = 0,
+                       breaks = seq(-1,1,length.out = 5),
+                       limits = c(-1, 1),
+                       name = 'Trend\ncorrelation') + labs(x = '', y = '') + theme_dark() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+## Look at average slopes over time and compare with watershed conditions (for the more recent 2017-2023 period)
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Create data frame of sites
+slopes_df <- data.frame(
+  MonitoringLocationIdentifier = unique(datNCRN2$data_train$series),
+  avg_trend = NA
+)
+
+# For each site
+for (i in 1:nrow(slopes_df)){ # Number of monitoring sites
+  # Get average trend slope
+  slopes_df$avg_trend[i] <- (mean(hindcast(modNCRN2, type="trend")$hindcasts[[i]]) * 0.85 + mean(forecast(modNCRN2, type="trend")$forecasts[[i]]) * 0.15) # The [[i]] is the series number. I weighted it to include the training and testing datasets (85% to training, 15% to testing) so that the entire time period is included in the mean. There may be a better way of getting the whole time period of data.
+  print(i)
+}
+
+# Convert monthly trend to annual
+slopes_df$annual_trend <- slopes_df$avg_trend * 12
+
+# Join with watershed conditions
+shed_sums <- read.csv("Watershed conditions 2023_09_19.csv") %>%
+  rename(MonitoringLocationIdentifier=NEW_IMLOCI) %>%
+  arrange(MonitoringLocationIdentifier)
+slopes_df_join <- left_join(slopes_df, shed_sums, by="MonitoringLocationIdentifier")
+
+# Plot it
+plot(slopes_df_join$Watershed.Percent.Urban..DW., slopes_df_join$annual_trend,
+     col="blue",xlab="Built area (% watershed)", ylab="SC trend (uS/cm/yr 2017-2023)"); grid();abline(h=0)
+
+```
+
+## Map of SC trends across network
+
+This section adds a few more data files that are needed in the same directory as the script.
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+
+# For each site
+for (i in 1:nrow(slopes_df)){ # Number of monitoring sites
+  # Get average trend slope
+  slopes_df$avg_trend_full[i] <- (mean(hindcast(modNCRN, type="trend")$hindcasts[[i]]) * 0.85 + mean(forecast(modNCRN, type="trend")$forecasts[[i]]) * 0.15) # The [[i]] is the series number. I weighted it to include the training and testing datasets (85% to training, 15% to testing) so that the entire time period is included in the mean. There may be a better way of getting the whole time period of data.
+  print(i)
+}
+
+# Convert monthly trend to annual
+slopes_df$annual_trend_full <- slopes_df$avg_trend_full * 12
+
+# Add to watersheds data
+slopes_df_join <- left_join(slopes_df, shed_sums, by="MonitoringLocationIdentifier")
+```
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Add GIS files and background SC (EPA data)
+sheds <- st_read("NCRN_watersheds_2023_07_06_wgs84.shp")
+sc <- read.csv("NCRN_Monitoring_Locations_with_background_SC_2023_12_21.csv")
+states <- st_read("cb_2018_us_state_20m.shp")
+nps <- st_read("nps_boundary_fixed_geoms_region.shp")
+
+# Join with GIS
+sheds$MonitoringLocationIdentifier <- sheds$NEW_IMLOCI
+sc$MonitoringLocationIdentifier <- sc$IMLOCID
+spc_join <- left_join(slopes_df, sc, by="MonitoringLocationIdentifier")
+spc_join <- left_join(spc_join, sheds, by="MonitoringLocationIdentifier")
+spc_join <- left_join(spc_join, shed_sums[c("MonitoringLocationIdentifier","Watershed.Percent.Urban..DW.")], by="MonitoringLocationIdentifier")
+
+# Select colors (all)
+cols <- rep(NA,nrow(spc_join))
+cols[spc_join$annual_trend_full<=100] <- "blue"
+cols[spc_join$annual_trend_full<=10] <- "cyan"
+cols[spc_join$annual_trend_full<=1] <- "grey"
+cols[spc_join$annual_trend_full<=-1] <- "orchid1"
+cols[spc_join$annual_trend_full<=-10] <- "red"
+spc_join$cols <- cols
+
+# Select colors (newer)
+cols2 <- rep(NA,nrow(spc_join))
+cols2[spc_join$annual_trend<=100] <- "blue"
+cols2[spc_join$annual_trend<=10] <- "cyan"
+cols2[spc_join$annual_trend<=1] <- "grey"
+cols2[spc_join$annual_trend<=-1] <- "orchid1"
+cols2[spc_join$annual_trend<=-10] <- "red"
+spc_join$cols2 <- cols2
+
+# Add to plot que and sort
+spc_join_plot <- rbind(
+  spc_join[spc_join$cols=="grey",],
+  spc_join[spc_join$cols=="cyan",],
+  spc_join[spc_join$cols=="orchid1",],
+  spc_join[spc_join$cols=="blue",],
+  spc_join[spc_join$cols=="red",]
+)
+
+spc_join_plot2 <- rbind(
+  spc_join[spc_join$cols2=="grey",],
+  spc_join[spc_join$cols2=="cyan",],
+  spc_join[spc_join$cols2=="orchid1",],
+  spc_join[spc_join$cols2=="blue",],
+  spc_join[spc_join$cols2=="red",]
+)
+  
+# Plot
+par(mfrow=c(1,2),mgp=c(2,1,0),mar=c(3,3,1,1),pty='s')
+plot(spc_join_plot$LONGITUDE,spc_join_plot$LATITUDE,col=spc_join_plot$cols,type='n',main="",
+     xlab="Lon",ylab="Lat")
+plot(nps$geometry,add=T,border="palegreen")
+plot(states$geometry, add=T,lwd=3,border="black")
+points(spc_join_plot$LONGITUDE,spc_join_plot$LATITUDE,col=spc_join_plot$cols,lwd=2)
+
+legend("topright",legend=c(">10","1 to 10", "No trend","-10 to -1", "<-10","National Parks","States"),
+       col=c("blue","cyan","grey","orchid1","red","palegreen","black"),
+       pch=c("o","o","o","o","o",NA,NA),bg="white",title="SC change (uS/cm/yr)",
+       lwd=c(NA,NA,NA,NA,NA,1,1),cex=0.7)
+
+text(
+  x=c(-77.66,-77.7,-77.5,-77.48,-77.5,-77.4,-77.3,-77.13,-77.14,-76.95),
+  y=c(39.25,39.55,39.57,39.4,38.88,38.66,38.9,39.03,38.86,38.76),
+  labels=c("HAFE","ANTI","CATO","MONO","MANA","PRWI","WOTR","ROCR","GWMP","NACE"),
+  cex=0.75
+)
+title("a)",adj=0.05, line=-1.1, cex.main=1.25)
+
+plot(spc_join_plot2$LONGITUDE,spc_join_plot2$LATITUDE,col=spc_join_plot2$cols,type='n', main="",
+     xlab="Lon",ylab="Lat")
+plot(nps$geometry,add=T,border="palegreen")
+plot(states$geometry, add=T,lwd=3,border="black")
+points(spc_join_plot2$LONGITUDE,spc_join_plot2$LATITUDE,col=spc_join_plot2$cols2,pch=1,lwd=2)
+
+text(
+  x=c(-77.66,-77.7,-77.5,-77.48,-77.5,-77.4,-77.3,-77.13,-77.14,-76.95),
+  y=c(39.25,39.55,39.57,39.4,38.88,38.66,38.9,39.03,38.86,38.76),
+  labels=c("HAFE","ANTI","CATO","MONO","MANA","PRWI","WOTR","ROCR","GWMP","NACE"),
+  cex=0.75
+)
+title("b)",adj=0.05, line=-1.1, cex.main=1.25)
+par(mfrow=c(1,1))
+
+```
+
+## Time series plots for each site
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+# Show time series and forecasts for each site
+par(mfrow=c(3,3),mgp=c(2,1,0),mar=c(3,3,1,1))
+for (i in 1:9){
+  
+  # Calculate ylims for display
+  ylim1 <- quantile(datNCRN$data_train$y[datNCRN$data_train$series==unique(datNCRN$data_train$series)[i]],0.01,na.rm=T)
+  ylim2 <- quantile(datNCRN$data_train$y[datNCRN$data_train$series==unique(datNCRN$data_train$series)[i]],0.99,na.rm=T)
+  
+  # Make plot
+  plot(modNCRN,type="forecast",series=i,realisations=F,ylab="SC (uS/cm)",
+                main=unique(datNCRN$data_train$series)[i],
+       hide_xlabels=T, ylim=c(ylim1,ylim2)) # Use type="forecast to see time series, or type="trend" to see trend.
+  axis(1,at=c(1,61,121,181,241),labels=c(2005,2010,2015,2020,2025))
+}
+
+# # Print as a figure
+# dev.off()
+# for (j in 1:3){
+#   png(paste("time_series",j,".png",sep=""),bg="white",res=300,width=6.5,
+#       height=6.5,units="in")
+#   par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,1,1))
+#   start=c(1,16,31)
+#   end=c(15,30,37)
+#   for (i in start[j]:end[j]){
+#     
+#       # Calculate ylims for display
+#     ylim1 <- quantile(datNCRN$data_train$y[datNCRN$data_train$series==unique(datNCRN$data_train$series)[i]],0.01,na.rm=T)
+#     ylim2 <- quantile(datNCRN$data_train$y[datNCRN$data_train$series==unique(datNCRN$data_train$series)[i]],0.99,na.rm=T)
+#   
+#     plot(modNCRN,type="forecast",series=i,realisations=F,ylab="SC (uS/cm)",
+#                   main=unique(datNCRN$data_train$series)[i],
+#          hide_xlabels=T, ylim=c(ylim1,ylim2))
+#     axis(1,at=c(1,61,121,181,241),labels=c(2005,2010,2015,2020,2025))
+#   }
+#   dev.off()
+# }
+
+par(mfrow=c(1,1))
+
+```
+
+## Trends plots for each site
+
+```{r,results='hide',message=FALSE,warning=FALSE}
+par(mfrow=c(3,3),mgp=c(2,1,0),mar=c(3,3,1,1))
+
+for (i in 1:9){
+  plot(modNCRN,type="trend",series=i,realisations=F,ylab="Trend (uS/cm)",
+                main=unique(datNCRN$data_train$series)[i],hide_xlabels=T) # Use type="forecast to see time series, or type="trend" to see trend.
+  axis(1,at=c(1,61,121,181,241),labels=c(2005,2010,2015,2020,2025))
+  title(main=unique(datNCRN$data_train$series)[i])
+  abline(h=0,lwd=2)
+}
+
+par(mfrow=c(1,1))
+
+```
