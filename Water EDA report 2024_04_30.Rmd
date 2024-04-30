@@ -7,6 +7,8 @@ output: html_document
 
 This formal, organized report includes data summary statistics, results from exploratory data analysis, and visualizations of all NCRN water quality data. Preparation of this report will inform identification of missing, incomplete, or erroneous data and subsequent updates to the data workflow processes and to the NCRN Water Monitoring Protocol.
 
+QC scripts can be found at <https://github.com/NCRN/WaterQC/tree/main>
+
 ### Load packages
 
 ```{r, echo=F}
@@ -614,4 +616,195 @@ wat2 <- data.frame(
 
 # Write to csv
 # write.csv(wat2, "Watershed conditions table 2.csv", row.names=F)
+```
+
+### Make time series of all sites and characteristics
+
+```{r, echo=F, fig.width=6.5, fig.height=7.5, warning=F}
+
+# Select desired characteristics
+all_chars <- c("Acid Neutralizing Capacity (ANC)",
+               "Dissolved oxygen (DO)",
+               "Temperature, water",
+               "pH",
+               "Total Nitrogen, mixed forms",
+               "Total Phosphorus, mixed forms")
+
+# Loop through multiple characteristics
+for (CharacteristicName2 in all_chars){
+
+  # Set up data frame and ticker
+  slopes_df <- data.frame(MonitoringLocationIdentifier=unique(current_sites$MonitoringLocationIdentifier[current_sites$MonitoringLocationIdentifier!="NCRN_GWMP_SPRU"]),
+                          slopes_avg = NA, p_value = NA, MAD=NA, lci=NA, uci=NA, ci=NA)
+  slopes_ticker <- 1
+  
+  # Start loop through figures
+  for (plot_num in 1:3){
+    
+    # Select site groups to plot and plot size
+    if (plot_num==1){
+      site_nums <- 1:15
+      # windows(6.5,7.5)
+      par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
+    } else if (plot_num==2){
+      site_nums <- 16:30
+      # windows(6.5,7.5)
+      par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
+    } else if (plot_num==3){
+      site_nums <- 31:37
+      # windows(6.5,4.5)
+      par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
+    }
+    
+    # Get site names
+    sites_unique <- unique(current_sites$MonitoringLocationIdentifier)
+    sites_unique <- sites_unique[sites_unique!="NCRN_GWMP_SPRU"]
+    
+    # Start ticker for legend placement
+    ticker <- 1
+    
+    # Start loop through sites
+    for (i in site_nums){
+      
+      # Choose site
+      site <- sites_unique[i]
+      
+      # Query time series
+      site_data <- wdata_avgd[wdata_avgd$MonitoringLocationIdentifier == site &
+                                wdata_avgd$CharacteristicName == CharacteristicName2,]
+      
+      # Remove early nutrient measurements
+      if (CharacteristicName2 %in% c("Total Nitrogen, mixed forms", "Total Phosphorus, mixed forms")){
+        site_data <- site_data[site_data$ActivityStartDate >= as.Date("2016-09-26"),]
+      }
+      
+      # Format time series
+      time_series = data.frame(
+        Date = site_data$ActivityStartDate,
+        Value = site_data$ResultMeasureValue) %>%
+        arrange(Date)
+      
+      # Plot time series
+      plot(time_series$Date, time_series$Value, ylab=CharacteristicName2, main=substr(site,6,14),
+           type='n', xlab="",ylim=c(quantile(time_series$Value,0.04,na.rm=T), quantile(time_series$Value,0.96,na.rm=T)))
+      grid()
+      lines(time_series$Date, time_series$Value, col="darkgrey")
+      
+      # Set up trend data
+      x <- site_data$ActivityStartDate
+      y <- site_data$ResultMeasureValue
+      
+      # Remove NAs
+      x <- x[!is.na(x) & !is.na(y)]
+      y <- y[!is.na(x) & !is.na(y)]
+      
+      # Convert to decimal date
+      x <- decimal_date(x)
+      
+      # Remove zero and negative values
+      # x <- x[y>=1]
+      # time_series <- time_series[y>=1,]
+      # y <- y[y>=1] 
+      
+      # Create trend model for whole time period
+      g <- mblm(y ~ x)
+      
+      # Add legend to first plot of figure
+      if (ticker==1){
+        legend("bottomright",legend=c("Data","Trend"),col=c("darkgrey","gold"),lwd=c(1,2),bty="n")
+        ticker <- 0
+      }
+      
+      # Calculate p-value and performance statistic from summary
+      gs <- summary(g)
+      slopes_df$p_value[slopes_ticker] <- gs$coefficients[2,4]
+      slopes_df$MAD[slopes_ticker] <- gs$coefficients[2,2]
+      
+      # Add to data frame
+      slopes_df$slopes_avg[slopes_ticker] <- gs$coefficients[2,1]
+      
+      # Add confidence interval
+      uci <- confint(g)[2,2]
+      lci <- confint(g)[2,1]
+      ci <- uci - lci
+      slopes_df$lci[slopes_ticker] <- lci
+      slopes_df$uci[slopes_ticker] <- uci
+      slopes_df$ci[slopes_ticker] <- ci
+      
+      # Up ticker
+      slopes_ticker <- slopes_ticker + 1
+      
+      # Make p-values for display
+      if (gs$coefficients[2,4]<0.001){
+        p_disp <- "p<0.001"
+      } else {
+        p_disp <- paste("p=",round(gs$coefficients[2,4],3),sep="")
+      }
+      
+      # Add model info to the plot
+      if (gs$coefficients[2,4] < 0.05){
+        lines(time_series$Date,g$fitted.values,type='l', col="gold",lwd=2)
+        title(paste("Trend=",round(gs$coefficients[2,1],2),", ",p_disp,sep=""),adj=0.02, line=-1.2, cex.main=1)
+      }
+      
+      # Box it in
+      box()
+    }
+  }
+}
+```
+
+### Make boxplots for all characteristics
+
+```{r, echo=F}
+
+# Select desired characteristics
+all_chars2 <- c("Acid Neutralizing Capacity (ANC)",
+               "Dissolved oxygen (DO)",
+               "Temperature, water",
+               "pH",
+               "Total Nitrogen, mixed forms",
+               "Total Phosphorus, mixed forms")
+
+# Loop through multiple characteristics
+for (CharacteristicName3 in all_chars2){
+
+  ### Boxplot ##################################################################
+  # Pivot the data
+  pw <- wdata_avgd[wdata_avgd$CharacteristicName==CharacteristicName3,] %>%
+    pivot_wider(names_from="MonitoringLocationIdentifier",
+                values_from="ResultMeasureValue")
+  
+    # Remove early nutrient measurements
+  if (CharacteristicName3 %in% c("Total Nitrogen, mixed forms", "Total Phosphorus, mixed forms")){
+    pw <- pw[pw$ActivityStartDate >= as.Date("2016-09-26"),]
+  }
+  
+  # Create a NA data frame to convert the list to
+  pw_df <- data.frame() 
+  
+  # Populate the data frame
+  for (i in 1:ncol(pw)){
+    site_data <- unlist(pw[[i]])
+    nrows <- length(site_data) 
+    pw_df[1:nrows,i] <- site_data # Add column
+  }
+  colnames(pw_df) <- substr(colnames(pw),6,14)
+  pw_df <- pw_df[3:length(pw_df)]
+  
+  # Sort sites by median
+  medians <- apply(pw_df,2,median, na.rm=T)
+  order1 <- row_number(medians)
+  order1_df <- data.frame(order1 = order1, sort1 = 1:length(order1)) %>% arrange(order1)
+  toPlot <- pw_df[,order1_df$sort1]
+  
+  # Make the boxplot
+  par(mar=c(10,4,0,1)+0.1,mgp=c(3,1,0))
+  boxplot(toPlot, names=colnames(toPlot),las=2,
+          ylab=CharacteristicName3,cex.axis=1,xlim=c(1.5,36.5),
+          ylim=c(quantile(toPlot,0.01,na.rm=T), quantile(toPlot,0.99,na.rm=T)))
+  grid()
+  boxplot(toPlot, names=colnames(toPlot),las=2,
+          ylab=CharacteristicName3,cex.axis=1, add=T,xlim=c(1.5,36.5))
+}
 ```
