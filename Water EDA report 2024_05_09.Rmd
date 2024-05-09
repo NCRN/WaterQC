@@ -17,6 +17,9 @@ library(tidyr)
 library(lubridate)
 library(sf)
 library(mblm)
+library(ggplot2)
+library(plotly)
+library(htmlwidgets)
 ```
 
 ### Read and format data
@@ -315,6 +318,63 @@ for (plot_num in 1:3){
     box()
   }
 }
+
+### Plot with ggplotly #############################################################
+
+# Make special function (https://stackoverflow.com/questions/48349858/how-can-i-use-theil-sen-method-with-geom-smooth)
+sen <- function(..., weights = NULL) {
+  mblm::mblm(...)
+}
+
+# Start loop through figures
+for (plot_num in 1:3){
+  
+  # Select site groups to plot and plot size
+  if (plot_num==1){
+    site_nums <- 1:15
+  } else if (plot_num==2){
+    site_nums <- 16:30
+  } else if (plot_num==3){
+    site_nums <- 31:37
+  }
+  
+  # Get site names
+  sites_unique <- unique(current_sites$MonitoringLocationIdentifier)
+  sites_unique <- sites_unique[sites_unique!="NCRN_GWMP_SPRU"]
+  ggsites <- sites_unique[site_nums]
+  
+  # Query time series
+  site_data <- wdata_avgd[wdata_avgd$MonitoringLocationIdentifier %in% ggsites &
+                            wdata_avgd$CharacteristicName == CharacteristicName,]
+  
+  # Format time series
+  time_series = data.frame(
+    Date = site_data$ActivityStartDate,
+    Value = site_data$ResultMeasureValue,
+    Site = site_data$MonitoringLocationIdentifier) %>%
+    arrange(Date)
+    
+  # Remove NAs
+  time_series <- time_series[!is.na(time_series$Date) & !is.na(time_series$Value),]
+  
+  # Convert to decimal date
+  time_series$Date_dec <- decimal_date(time_series$Date)
+  
+  # Remove zero and negative values
+  time_series <- time_series[time_series$Value>=1,]
+  
+  # Make ggplot
+  a <- ggplot(time_series, aes(x=Date, y=Value))
+  a <- a + geom_line(color="darkgrey") +
+    labs(y="SC (µS/cm)") +
+    geom_smooth(method=sen, color="gold")+
+    facet_wrap(vars(Site))
+  # ggplotly(a)
+  
+  # Save widget
+  # saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName," time series ",plot_num,".html",sep=""),background='r')
+
+}
 ```
 
 ### Watershed protection and trend analysis plots
@@ -497,6 +557,63 @@ summary(lm1)
 abline(lm1, col="blue")
 
 legend("bottomright",legend=c("ΔSC CI <5 µS/cm/yr", "ΔSC CI >5 µS/cm/yr"),pch=2,bg="white",col=c("black","grey"))
+
+
+### Make ggplotly scatterplots #####################################################
+# Make urban ggplot
+a <- ggplot(current_sites, aes(x=(urb_tot*100), y=medians, text = MonitoringLocationIdentifier))
+a <- a + geom_point() +
+  geom_errorbar(aes(ymin=q1, ymax=q3))+
+  labs(y="SC over background (µS/cm)", x="Urban (%)") +
+  geom_smooth(method=lm, color="blue")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban-SC scatterplot.html",sep=""),background='r')
+
+# Make forest ggplot
+a <- ggplot(current_sites, aes(x=(for_tot*100), y=medians, text = MonitoringLocationIdentifier))
+a <- a + geom_point() +
+  geom_errorbar(aes(ymin=q1, ymax=q3))+
+  labs(y="SC over background (µS/cm)", x="Forest (%)") +
+  geom_smooth(method=lm, color="blue")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/forest-SC scatterplot.html",sep=""),background='r')
+
+# Make protected area ggplot
+a <- ggplot(current_sites, aes(x=Prot_area_pct..PAD., y=medians, text = MonitoringLocationIdentifier))
+a <- a + geom_point() +
+  geom_errorbar(aes(ymin=q1, ymax=q3))+
+  labs(y="SC over background (µS/cm)", x="Protected area (%)") +
+  geom_smooth(method=lm, color="blue")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/protected area-SC scatterplot.html",sep=""),background='r')
+
+
+# Make urban trends ggplot
+a <- ggplot(current_sites, aes(x=(urb_tot*100), y=sen_slope, text = MonitoringLocationIdentifier))
+a <- a + geom_point(aes(size=urb_com)) +
+  geom_smooth(method=lm, color="blue") +
+  labs(y="ΔSC (µS/cm per year)", x="Total urban area (% watershed)\nSize = urban growth rate 0-10%", subtitle="Size = urban growth rate 0-10%")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban trends scatterplot.html",sep=""),background='r')
+
+
+# Make salt trends ggplot
+a <- ggplot(current_sites, aes(x=avg_ton, y=sen_slope, text = MonitoringLocationIdentifier))
+a <- a + geom_point() +
+  geom_smooth(method=lm, color="blue") +
+  labs(y="ΔSC (µS/cm per year)", x="Salt applications (tons/km2/yr)")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/salt trends scatterplot.html",sep=""),background='r')
 ```
 
 ### Output watershed conditions table
@@ -559,6 +676,17 @@ points(current_sites$urb_com*100, current_sites$sen_slope,
 # Add legend
 legend("topleft", legend=c("0%", "100%"), title="Total urban area\n(ΔSC CI <5 µS/cm/yr)", 
        pch=0, pt.cex=c(0.25,1.75),bg="white", inset=c(0.4,0))
+
+
+# Make urban trends ggplot
+a <- ggplot(current_sites, aes(x=(urb_com*100), y=sen_slope, text = MonitoringLocationIdentifier))
+a <- a + geom_point(aes(size=(urb_tot*100)), shape=1) +
+  geom_smooth(method=lm, color="blue") +
+  labs(y="ΔSC (µS/cm per year)", x="Urban growth rate\nSize = total urban area (0-100%)")
+ggplotly(a, tooltip="text")
+
+# Save widget
+saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban trends scatterplot (axes flipped).html",sep=""),background='r')
 ```
 
 ### Plots with imperviousness, road density, and other predictor options
@@ -751,7 +879,71 @@ for (CharacteristicName2 in all_chars){
       box()
     }
   }
+  
+  ### Plot with ggplotly ###########################################################
+  
+  # Start loop through figures
+  for (plot_num in 1:3){
+    
+    # Select site groups to plot and plot size
+    if (plot_num==1){
+      site_nums <- 1:15
+    } else if (plot_num==2){
+      site_nums <- 16:30
+    } else if (plot_num==3){
+      site_nums <- 31:37
+    }
+    
+    # Get site names
+    sites_unique <- unique(current_sites$MonitoringLocationIdentifier)
+    sites_unique <- sites_unique[sites_unique!="NCRN_GWMP_SPRU"]
+    ggsites <- sites_unique[site_nums]
+    
+    # Query time series
+    site_data <- wdata_avgd[wdata_avgd$MonitoringLocationIdentifier %in% ggsites &
+                              wdata_avgd$CharacteristicName == CharacteristicName2,]
+    
+    # Format time series
+    time_series = data.frame(
+      Date = site_data$ActivityStartDate,
+      Value = site_data$ResultMeasureValue,
+      Site = site_data$MonitoringLocationIdentifier) %>%
+      arrange(Date)
+      
+    # Remove NAs
+    time_series <- time_series[!is.na(time_series$Date) & !is.na(time_series$Value),]
+    
+    # Convert to decimal date
+    time_series$Date_dec <- decimal_date(time_series$Date)
+    
+    # Remove zero and negative values
+    # time_series <- time_series[time_series$Value>=1,]
+    
+    # Remove extreme water temp errors
+    if (CharacteristicName2=="Temperature, water"){
+      time_series <- time_series[time_series$Value<500,]
+    }
+    
+    # Remove early nutrient measurements
+    if (CharacteristicName2 %in% c("Total Nitrogen, mixed forms", "Total Phosphorus, mixed forms")){
+      time_series <- time_series[time_series$Date >= as.Date("2016-09-26"),]
+    }
+    
+    # Make ggplot
+    a <- ggplot(time_series, aes(x=Date, y=Value))
+    a <- a + geom_line(color="darkgrey") +
+      labs(y=CharacteristicName2) +
+      geom_smooth(method=sen, color="gold")+
+      facet_wrap(vars(Site))
+    # ggplotly(a)
+    
+    # Save widget
+    saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName2," time series ",plot_num,".html",sep=""),background='r')
+  
+  }
 }
+
+
 ```
 
 ### Make boxplots for all characteristics
@@ -764,7 +956,8 @@ all_chars2 <- c("Acid Neutralizing Capacity (ANC)",
                "Temperature, water",
                "pH",
                "Total Nitrogen, mixed forms",
-               "Total Phosphorus, mixed forms")
+               "Total Phosphorus, mixed forms",
+               "Specific conductance")
 
 # Loop through multiple characteristics
 for (CharacteristicName3 in all_chars2){
@@ -806,5 +999,23 @@ for (CharacteristicName3 in all_chars2){
   grid()
   boxplot(toPlot, names=colnames(toPlot),las=2,
           ylab=CharacteristicName3,cex.axis=1, add=T,xlim=c(1.5,36.5))
+  
+  ### Plot with ggplotly ###########################################################
+  # Pivot back
+  toPlot2 <- pivot_longer(toPlot, cols=colnames(toPlot))
+  toPlot2 <- toPlot2[!is.na(toPlot2$value),]
+  
+  # Make ggplot
+  a <- ggplot(toPlot2, aes(reorder(name,value,FUN=median), value))
+  a <- a + geom_boxplot() +
+    labs(y=CharacteristicName3, x="") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  # ggplotly(a)
+  
+  # Save widget
+  saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName3," boxplots.html",sep=""),background='r')
 }
+
+
+
 ```
