@@ -11,7 +11,7 @@ QC scripts can be found at <https://github.com/NCRN/WaterQC/tree/main>
 
 ### Load packages
 
-```{r, echo=F}
+```{r, message=F, warning=F}
 library(dplyr)
 library(tidyr)
 library(lubridate)
@@ -26,7 +26,7 @@ library(htmlwidgets)
 
 Make sure the EDD data (e.g., 20240129_wqp_wqx_bss_wq_npsncrn.csv) and the watershed conditions data (Watershed conditions 2024_03_27.csv) are both in the working directory.
 
-```{r, echo=F}
+```{r, message=F, warning=F}
 ### Water quality data #########################################################
 # Read WQ data
 fileName <- "20240129_wqp_wqx_bss_wq_npsncrn" # Leave out .csv extension
@@ -204,7 +204,11 @@ current_sites_save <- current_sites
 
 ### Time series plots
 
-```{r, echo=F, fig.width=6.5, fig.height=7.5}
+```{r, message=F, warning=F, fig.width=6.5, fig.height=7.5}
+
+# Start list of plots
+plotlist = list()
+
 # Set up data frame and ticker
 slopes_df <- data.frame(MonitoringLocationIdentifier=unique(current_sites$MonitoringLocationIdentifier[current_sites$MonitoringLocationIdentifier!="NCRN_GWMP_SPRU"]),
                         slopes_avg = NA, p_value = NA, MAD=NA, lci=NA, uci=NA, ci=NA)
@@ -213,19 +217,13 @@ slopes_ticker <- 1
 # Start loop through figures
 for (plot_num in 1:3){
   
-  # Select site groups to plot and plot size
+  # Select site groups
   if (plot_num==1){
     site_nums <- 1:15
-    # windows(6.5,7.5)
-    par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
   } else if (plot_num==2){
     site_nums <- 16:30
-    # windows(6.5,7.5)
-    par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
   } else if (plot_num==3){
     site_nums <- 31:37
-    # windows(6.5,4.5)
-    par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
   }
   
   # Get site names
@@ -251,12 +249,6 @@ for (plot_num in 1:3){
       Value = site_data$ResultMeasureValue) %>%
       arrange(Date)
     
-    # Plot time series
-    plot(time_series$Date, time_series$Value, ylab="SC (µS/cm)", main=substr(site,6,14),
-         type='n', xlab="",ylim=c(quantile(time_series$Value,0.04,na.rm=T), quantile(time_series$Value,0.96,na.rm=T)))
-    grid()
-    lines(time_series$Date, time_series$Value, col="darkgrey")
-    
     # Set up trend data
     x <- site_data$ActivityStartDate
     y <- site_data$ResultMeasureValue
@@ -276,12 +268,6 @@ for (plot_num in 1:3){
     # Create trend model for whole time period
     g <- mblm(y ~ x)
     
-    # Add legend to first plot of figure
-    if (ticker==1){
-      legend("bottomright",legend=c("Data","Trend"),col=c("darkgrey","gold"),lwd=c(1,2),bty="n")
-      ticker <- 0
-    }
-    
     # Calculate p-value and performance statistic from summary
     gs <- summary(g)
     slopes_df$p_value[slopes_ticker] <- gs$coefficients[2,4]
@@ -300,22 +286,7 @@ for (plot_num in 1:3){
     
     # Up ticker
     slopes_ticker <- slopes_ticker + 1
-    
-    # Make p-values for display
-    if (gs$coefficients[2,4]<0.001){
-      p_disp <- "p<0.001"
-    } else {
-      p_disp <- paste("p=",round(gs$coefficients[2,4],3),sep="")
-    }
-    
-    # Add model info to the plot
-    if (gs$coefficients[2,4] < 0.05){
-      lines(time_series$Date,g$fitted.values,type='l', col="gold",lwd=2)
-      title(paste("Trend=",round(gs$coefficients[2,1],2),", ",p_disp,sep=""),adj=0.02, line=-1.2, cex.main=1)
-    }
-    
-    # Box it in
-    box()
+
   }
 }
 
@@ -368,29 +339,24 @@ for (plot_num in 1:3){
   a <- a + geom_line(color="darkgrey") +
     labs(y="SC (µS/cm)") +
     geom_smooth(method=sen, color="gold")+
-    facet_wrap(vars(Site))
-  # ggplotly(a)
+    facet_wrap(vars(Site), scales="free")
   
-  # Save widget
-  # saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName," time series ",plot_num,".html",sep=""),background='r')
+  # Save outputs
+  plotlist[[plot_num]] = ggplotly(a)
 
 }
+
+# Print ggplotly
+htmltools::tagList(setNames(plotlist, NULL))
 ```
 
 ### Watershed protection and trend analysis plots
 
-```{r, echo=F, fig.width=5.5, fig.height=6.5}
+```{r, message=F, warning=F, fig.width=5.5, fig.height=6.5}
 # Assign plotting specs
 ylabs <- "SC (µS/cm)"
 ylim=1600
 threshold <- 171
-
-### Set up plot and layout
-# windows(5.5,6.5)
-nf <- layout(matrix(c(1,1,1,1,1,1, # top
-                      2,2,3,3,4,4, # middle
-                      5,5,5,6,6,6), # bottom
-                    nrow=3, ncol=6,byrow=TRUE))
 
 ### Boxplot ##################################################################
 # Pivot the data
@@ -416,83 +382,6 @@ order1 <- row_number(medians)
 order1_df <- data.frame(order1 = order1, sort1 = 1:length(order1)) %>% arrange(order1)
 toPlot <- pw_df[,order1_df$sort1]
 
-# Make the boxplot
-par(mar=c(5,4,0,1)+0.1,mgp=c(3,1,0))
-boxplot(toPlot, names=colnames(toPlot),las=2,ylim=c(0,ylim),
-        ylab=ylabs,cex.axis=1,xlim=c(1.5,36.5))
-grid()
-boxplot(toPlot, names=colnames(toPlot),las=2,ylim=c(0,ylim),
-        ylab=ylabs,cex.axis=1, add=T,xlim=c(1.5,36.5))
-
-# Add Morgan 2007 line and title
-abline(h=threshold, col="red",lty=2)
-abline(h=1500, col="blue", lty=2)
-title("a)",adj=0.02, line=-1.2, cex.main=1.5)
-box()
-
-# Add legend
-legend("topleft",legend=c("Measurement","Critical value","Brackish"),pch=c("o","-","-"),
-       col=c("black","red","blue"),inset=c(0.06,0),bg="white", pt.cex=c(1,1.5,1.5))
-
-# Make scatterplot (% urb)
-medians <- current_sites$medians
-q1 <- current_sites$q1
-q3 <- current_sites$q3
-x <- current_sites$urb_tot*100
-par(mgp=c(2,1,0),mar=c(3,3,4,0.5) + 0.1)
-plot(x,medians,ylim=c(min(q1,na.rm=T),max(q3,na.rm=T)),type="n",xlab="Urban (%)",
-     ylab="SC over background (µS/cm)")
-grid()
-points(x,medians)
-lines(rep(x,times=1,each=3),t(matrix(c(q1,q3,rep(NA,length(q1))),ncol=3,byrow=F)))
-
-# Add model
-lm1 <- lm(medians ~ x)
-abline(lm1,col="blue",lwd=1)
-print(summary(lm1))
-
-title("b)",adj=0.02, line=-1.2, cex.main=1.5)
-box()
-
-# Make scatterplot (% forest)
-par(mgp=c(2,1,0),mar=c(3,2.75,4,0.75) + 0.1)
-x <- current_sites$for_tot*100
-plot(x,medians,ylim=c(min(q1,na.rm=T),max(q3,na.rm=T)),type="n",xlab="Forest (%)",
-     ylab="")
-grid()
-points(x,medians)
-lines(rep(x,times=1,each=3),t(matrix(c(q1,q3,rep(NA,length(q1))),ncol=3,byrow=F)))
-
-# Add model
-lm1 <- lm(medians ~ x)
-abline(lm1,col="blue",lwd=1)
-print(summary(lm1))
-
-title(" c)",adj=0.02, line=-1.2, cex.main=1.5)
-
-# Add legend
-legend("topright",legend=c("Median","IQR","Model"),
-       col=c("black","black","blue"),pch=c("o","|","-"),pt.cex=c(1,1,2),
-       bg="white", inset=c(0.0,0))
-box()
-
-# Make scatterplot (% protected)
-par(mgp=c(2,1,0),mar=c(3,2.5,4,1) + 0.1)
-x <- current_sites$Prot_area_pct..PAD.
-plot(x,medians,ylim=c(min(q1,na.rm=T),max(q3,na.rm=T)),type="n",xlab="Protected area (%)",
-     ylab="")
-grid()
-points(x,medians)
-lines(rep(x,times=1,each=3),t(matrix(c(q1,q3,rep(NA,length(q1))),ncol=3,byrow=F)))
-
-# Add model
-lm1 <- lm(medians ~ x)
-abline(lm1,col="blue",lwd=1)
-print(summary(lm1))
-
-title("d)",adj=0.02, line=-1.2, cex.main=1.5)
-box()
-
 
 ### Trend analysis plots #######################################################
 ### Join the outputs from the above calculations 
@@ -508,56 +397,11 @@ current_sites$mk_p <- current_sites$p_value
 current_sites <- left_join(current_sites,avg_salt, by="MonitoringLocationIdentifier")
 current_sites$avg_ton <- current_sites$avg_kg / 1000
 
-
-### Plot it ####################################################################
 # Turn-off scientific notation
 options(scipen=999) 
 
-# Start plot
-par(mar=c(3,3,2,0.5), mgp=c(2,1,0))
-
-# Add trends plot
-current_sites$cols<- "grey"
-# current_sites$cols[current_sites$p_value<0.05] <- "black"
-current_sites$cols[current_sites$ci<=5] <- "black"
-
-plot(current_sites$urb_tot*100, current_sites$sen_slope,
-     xlab="Total urban area (% watershed)", ylab = "ΔSC (µS/cm per year)",
-     main=NULL,type="n")
-grid()
-points(current_sites$urb_tot*100, current_sites$sen_slope,
-       col=current_sites$cols,
-       cex=(current_sites$urb_com*25+0.5), pch=0) 
-
-title("e)",adj=0.02, line=-1.2, cex.main=1.5)
-
-# Add model
+# Add trends model 
 current_sites$urb_tot2 <- current_sites$urb_tot*100 # Just displayed as percent
-lm1 <- lm(current_sites$sen_slope ~ current_sites$urb_tot2)
-summary(lm1)
-abline(lm1, col="blue")
-
-# Add legend
-legend("topleft", legend=c("0%", "10%"), title="Urban growth rate\n(ΔSC CI <5 µS/cm/yr)", 
-       pch=0, pt.cex=c(0.5,3),bg="white", inset=c(0.11,0),cex=0.9)
-box()
-
-# Start road salt plot
-par(mgp=c(2,1,0),mar=c(3,2.5,2,1) + 0.1)
-plot(current_sites$avg_ton, current_sites$sen_slope, type="n", xlab="Salt applications (tons/km2/yr)",
-     ylab="")
-grid()
-points(current_sites$avg_ton, current_sites$sen_slope, col="grey",pch=2)
-points(current_sites$avg_ton[current_sites$ci<=5], current_sites$sen_slope[current_sites$ci<=5], col="black",pch=2)
-title("f)",adj=0.02, line=-1.2, cex.main=1.5)
-
-# Add model
-lm1 <- lm(current_sites$sen_slope ~ current_sites$avg_ton)
-summary(lm1)
-abline(lm1, col="blue")
-
-legend("bottomright",legend=c("ΔSC CI <5 µS/cm/yr", "ΔSC CI >5 µS/cm/yr"),pch=2,bg="white",col=c("black","grey"))
-
 
 ### Make ggplotly scatterplots #####################################################
 # Make urban ggplot
@@ -568,8 +412,6 @@ a <- a + geom_point() +
   geom_smooth(method=lm, color="blue")
 ggplotly(a, tooltip="text")
 
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban-SC scatterplot.html",sep=""),background='r')
 
 # Make forest ggplot
 a <- ggplot(current_sites, aes(x=(for_tot*100), y=medians, text = MonitoringLocationIdentifier))
@@ -579,8 +421,6 @@ a <- a + geom_point() +
   geom_smooth(method=lm, color="blue")
 ggplotly(a, tooltip="text")
 
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/forest-SC scatterplot.html",sep=""),background='r')
 
 # Make protected area ggplot
 a <- ggplot(current_sites, aes(x=Prot_area_pct..PAD., y=medians, text = MonitoringLocationIdentifier))
@@ -590,9 +430,6 @@ a <- a + geom_point() +
   geom_smooth(method=lm, color="blue")
 ggplotly(a, tooltip="text")
 
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/protected area-SC scatterplot.html",sep=""),background='r')
-
 
 # Make urban trends ggplot
 a <- ggplot(current_sites, aes(x=(urb_tot*100), y=sen_slope, text = MonitoringLocationIdentifier))
@@ -601,9 +438,6 @@ a <- a + geom_point(aes(size=urb_com)) +
   labs(y="ΔSC (µS/cm per year)", x="Total urban area (% watershed)\nSize = urban growth rate 0-10%", subtitle="Size = urban growth rate 0-10%")
 ggplotly(a, tooltip="text")
 
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban trends scatterplot.html",sep=""),background='r')
-
 
 # Make salt trends ggplot
 a <- ggplot(current_sites, aes(x=avg_ton, y=sen_slope, text = MonitoringLocationIdentifier))
@@ -611,14 +445,11 @@ a <- a + geom_point() +
   geom_smooth(method=lm, color="blue") +
   labs(y="ΔSC (µS/cm per year)", x="Salt applications (tons/km2/yr)")
 ggplotly(a, tooltip="text")
-
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/salt trends scatterplot.html",sep=""),background='r')
 ```
 
 ### Output watershed conditions table
 
-```{r, echo=F}
+```{r, message=F, warning=F}
 # Create watershed conditions data frame
 wat <- data.frame(
   Site_name = substr(current_sites$MonitoringLocationIdentifier,6,14),
@@ -629,13 +460,16 @@ wat <- data.frame(
   Area = round(current_sites$Area_km,1)) %>%
   arrange(Site_name)
 
+# Print outputs
+print(wat)
+
 # Write to csv
 # write.csv(wat, "Watershed conditions table 1 NLCD.csv", row.names=F)
 ```
 
 ### Count number of measurements per site
 
-```{r, echo=F}
+```{r, message=F, warning=F}
 # Extract data (SC)
 data1 <- wdata_avgd[wdata_avgd$MonitoringLocationIdentifier %in% current_sites$MonitoringLocationIdentifier &
                       wdata_avgd$CharacteristicName ==CharacteristicName,]
@@ -652,31 +486,9 @@ sd(data1_sum$n)
 
 ### Plot with urban expansion on x axis
 
-```{r, echo=F, fig.width=4, fig.height=4}
+```{r, message=F, warning=F, fig.width=4, fig.height=4}
 # Turn-off scientific notation
 options(scipen=999) 
-
-# Start plot
-# windows(4, 4)
-par(mar=c(3,3,1,1), mgp=c(2,1,0))
-
-# Add trends plot
-current_sites$cols<- "grey"
-# current_sites$cols[current_sites$p_value<0.05] <- "black"
-current_sites$cols[current_sites$ci<=5] <- "black"
-
-plot(current_sites$urb_com*100, current_sites$sen_slope,
-     xlab="", ylab = "",
-     main=NULL,type="n")
-grid()
-points(current_sites$urb_com*100, current_sites$sen_slope,
-       col=current_sites$cols,
-       cex=(current_sites$urb_tot*1.5+0.25), pch=0) 
-
-# Add legend
-legend("topleft", legend=c("0%", "100%"), title="Total urban area\n(ΔSC CI <5 µS/cm/yr)", 
-       pch=0, pt.cex=c(0.25,1.75),bg="white", inset=c(0.4,0))
-
 
 # Make urban trends ggplot
 a <- ggplot(current_sites, aes(x=(urb_com*100), y=sen_slope, text = MonitoringLocationIdentifier))
@@ -684,52 +496,11 @@ a <- a + geom_point(aes(size=(urb_tot*100)), shape=1) +
   geom_smooth(method=lm, color="blue") +
   labs(y="ΔSC (µS/cm per year)", x="Urban growth rate\nSize = total urban area (0-100%)")
 ggplotly(a, tooltip="text")
-
-# Save widget
-saveWidget(ggplotly(a, tooltip="text"), file = paste("Plots/urban trends scatterplot (axes flipped).html",sep=""),background='r')
 ```
 
 ### Plots with imperviousness, road density, and other predictor options
 
-```{r, echo=F, fig.width=6.5, fig.height=6.5}
-# Analyses with median SC
-# windows(6.5,6.5)
-par(mfrow=c(3,3))
-plot(current_sites$Watershed_Percent_Impervious_NLCD2019, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% impervious")
-plot(current_sites$urb_tot2, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% total urban area")
-plot(current_sites$open*100, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% open space")
-plot(current_sites$low*100, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% low intensity")
-plot(current_sites$med*100, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% medium intensity")
-plot(current_sites$high*100, current_sites$medians,ylab="SC over background (µS/cm)",xlab="% high intensity")
-plot(current_sites$roads_km_km2, current_sites$medians,ylab="SC over background (µS/cm)",xlab="Road density (km/km2)")
-
-summary(lm(current_sites$medians ~ current_sites$urb_tot2))
-summary(lm(current_sites$medians ~ current_sites$Watershed_Percent_Impervious_NLCD2019))
-summary(lm(current_sites$medians ~ current_sites$open))
-summary(lm(current_sites$medians ~ current_sites$low))
-summary(lm(current_sites$medians ~ current_sites$med))
-summary(lm(current_sites$medians ~ current_sites$high))
-summary(lm(current_sites$medians ~ current_sites$roads_km_km2))
-
-# Analyses with SC trends
-# windows(6.5,6.5)
-par(mfrow=c(3,3))
-plot(current_sites$Watershed_Percent_Impervious_NLCD2019, current_sites$sen_slope,ylab="SC trend",xlab="% impervious")
-plot(current_sites$urb_tot2, current_sites$sen_slope,ylab="SC trend",xlab="% total urban area")
-plot(current_sites$open*100, current_sites$sen_slope,ylab="SC trend",xlab="% open space")
-plot(current_sites$low*100, current_sites$sen_slope,ylab="SC trend",xlab="% low intensity")
-plot(current_sites$med*100, current_sites$sen_slope,ylab="SC trend",xlab="% medium intensity")
-plot(current_sites$high*100, current_sites$sen_slope,ylab="SC trend",xlab="% high intensity")
-plot(current_sites$roads_km_km2, current_sites$sen_slope,ylab="SC trend",xlab="Road density (km/km2)")
-
-summary(lm(current_sites$sen_slope ~ current_sites$urb_tot2))
-summary(lm(current_sites$sen_slope ~ current_sites$Watershed_Percent_Impervious_NLCD2019))
-summary(lm(current_sites$sen_slope ~ current_sites$open))
-summary(lm(current_sites$sen_slope ~ current_sites$low))
-summary(lm(current_sites$sen_slope ~ current_sites$med))
-summary(lm(current_sites$sen_slope ~ current_sites$high))
-summary(lm(current_sites$sen_slope ~ current_sites$roads_km_km2))
-
+```{r, message=F, warning=F, fig.width=6.5, fig.height=6.5}
 
 # Create extra watershed conditions data frame
 wat2 <- data.frame(
@@ -742,13 +513,19 @@ wat2 <- data.frame(
   Road_density = round(current_sites$roads_km_km2,1)) %>%
   arrange(Site_name)
 
+# Print outputs
+print(wat2)
+
 # Write to csv
 # write.csv(wat2, "Watershed conditions table 2.csv", row.names=F)
 ```
 
 ### Make time series of all sites and characteristics
 
-```{r, echo=F, fig.width=6.5, fig.height=7.5, warning=F}
+```{r, message=F, warning=F, fig.width=6.5, fig.height=7.5, warning=F}
+
+# Start list of plots
+plotlist = list()
 
 # Select desired characteristics
 all_chars <- c("Acid Neutralizing Capacity (ANC)",
@@ -772,15 +549,12 @@ for (CharacteristicName2 in all_chars){
     # Select site groups to plot and plot size
     if (plot_num==1){
       site_nums <- 1:15
-      # windows(6.5,7.5)
       par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
     } else if (plot_num==2){
       site_nums <- 16:30
-      # windows(6.5,7.5)
       par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
     } else if (plot_num==3){
       site_nums <- 31:37
-      # windows(6.5,4.5)
       par(mfrow=c(5,3),mgp=c(2,1,0),mar=c(3,3,2,1))
     }
     
@@ -812,12 +586,6 @@ for (CharacteristicName2 in all_chars){
         Value = site_data$ResultMeasureValue) %>%
         arrange(Date)
       
-      # Plot time series
-      plot(time_series$Date, time_series$Value, ylab=CharacteristicName2, main=substr(site,6,14),
-           type='n', xlab="",ylim=c(quantile(time_series$Value,0.04,na.rm=T), quantile(time_series$Value,0.96,na.rm=T)))
-      grid()
-      lines(time_series$Date, time_series$Value, col="darkgrey")
-      
       # Set up trend data
       x <- site_data$ActivityStartDate
       y <- site_data$ResultMeasureValue
@@ -836,12 +604,6 @@ for (CharacteristicName2 in all_chars){
       
       # Create trend model for whole time period
       g <- mblm(y ~ x)
-      
-      # Add legend to first plot of figure
-      if (ticker==1){
-        legend("bottomright",legend=c("Data","Trend"),col=c("darkgrey","gold"),lwd=c(1,2),bty="n")
-        ticker <- 0
-      }
       
       # Calculate p-value and performance statistic from summary
       gs <- summary(g)
@@ -862,21 +624,6 @@ for (CharacteristicName2 in all_chars){
       # Up ticker
       slopes_ticker <- slopes_ticker + 1
       
-      # Make p-values for display
-      if (gs$coefficients[2,4]<0.001){
-        p_disp <- "p<0.001"
-      } else {
-        p_disp <- paste("p=",round(gs$coefficients[2,4],3),sep="")
-      }
-      
-      # Add model info to the plot
-      if (gs$coefficients[2,4] < 0.05){
-        lines(time_series$Date,g$fitted.values,type='l', col="gold",lwd=2)
-        title(paste("Trend=",round(gs$coefficients[2,1],2),", ",p_disp,sep=""),adj=0.02, line=-1.2, cex.main=1)
-      }
-      
-      # Box it in
-      box()
     }
   }
   
@@ -934,21 +681,25 @@ for (CharacteristicName2 in all_chars){
     a <- a + geom_line(color="darkgrey") +
       labs(y=CharacteristicName2) +
       geom_smooth(method=sen, color="gold")+
-      facet_wrap(vars(Site))
-    # ggplotly(a)
+      facet_wrap(vars(Site), scales="free")
     
-    # Save widget
-    saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName2," time series ",plot_num,".html",sep=""),background='r')
+  # Save outputs
+  plotlist[[plot_num]] = ggplotly(a)
   
   }
 }
 
 
+# Print ggplotly
+htmltools::tagList(setNames(plotlist, NULL))
 ```
 
 ### Make boxplots for all characteristics
 
-```{r, echo=F}
+```{r, message=F, warning=F}
+
+# Start list of plots
+plotlist = list()
 
 # Select desired characteristics
 all_chars2 <- c("Acid Neutralizing Capacity (ANC)",
@@ -992,13 +743,13 @@ for (CharacteristicName3 in all_chars2){
   toPlot <- pw_df[,order1_df$sort1]
   
   # Make the boxplot
-  par(mar=c(10,4,0,1)+0.1,mgp=c(3,1,0))
-  boxplot(toPlot, names=colnames(toPlot),las=2,
-          ylab=CharacteristicName3,cex.axis=1,xlim=c(1.5,36.5),
-          ylim=c(quantile(toPlot,0.01,na.rm=T), quantile(toPlot,0.99,na.rm=T)))
-  grid()
-  boxplot(toPlot, names=colnames(toPlot),las=2,
-          ylab=CharacteristicName3,cex.axis=1, add=T,xlim=c(1.5,36.5))
+  # par(mar=c(10,4,0,1)+0.1,mgp=c(3,1,0))
+  # boxplot(toPlot, names=colnames(toPlot),las=2,
+  #         ylab=CharacteristicName3,cex.axis=1,xlim=c(1.5,36.5),
+  #         ylim=c(quantile(toPlot,0.01,na.rm=T), quantile(toPlot,0.99,na.rm=T)))
+  # grid()
+  # boxplot(toPlot, names=colnames(toPlot),las=2,
+  #         ylab=CharacteristicName3,cex.axis=1, add=T,xlim=c(1.5,36.5))
   
   ### Plot with ggplotly ###########################################################
   # Pivot back
@@ -1010,12 +761,15 @@ for (CharacteristicName3 in all_chars2){
   a <- a + geom_boxplot() +
     labs(y=CharacteristicName3, x="") +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-  # ggplotly(a)
+  
+  # Save outputs
+  plotlist[[plot_num]] = ggplotly(a)
   
   # Save widget
-  saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName3," boxplots.html",sep=""),background='r')
+  # saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName3," boxplots.html",sep=""),background='r')
 }
 
-
+# Print ggplotly
+htmltools::tagList(setNames(plotlist, NULL))
 
 ```
