@@ -711,6 +711,7 @@ htmltools::tagList(setNames(plotlist, NULL))
 
 # Start list of plots
 plotlist = list()
+ticker=1
 
 # Select desired characteristics
 all_chars2 <- c("Acid Neutralizing Capacity (ANC)",
@@ -753,15 +754,6 @@ for (CharacteristicName3 in all_chars2){
   order1_df <- data.frame(order1 = order1, sort1 = 1:length(order1)) %>% arrange(order1)
   toPlot <- pw_df[,order1_df$sort1]
   
-  # Make the boxplot
-  # par(mar=c(10,4,0,1)+0.1,mgp=c(3,1,0))
-  # boxplot(toPlot, names=colnames(toPlot),las=2,
-  #         ylab=CharacteristicName3,cex.axis=1,xlim=c(1.5,36.5),
-  #         ylim=c(quantile(toPlot,0.01,na.rm=T), quantile(toPlot,0.99,na.rm=T)))
-  # grid()
-  # boxplot(toPlot, names=colnames(toPlot),las=2,
-  #         ylab=CharacteristicName3,cex.axis=1, add=T,xlim=c(1.5,36.5))
-  
   ### Plot with ggplotly ###########################################################
   # Pivot back
   toPlot2 <- pivot_longer(toPlot, cols=colnames(toPlot))
@@ -774,7 +766,8 @@ for (CharacteristicName3 in all_chars2){
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
   
   # Save outputs
-  plotlist[[plot_num]] = ggplotly(a)
+  plotlist[[ticker]] = ggplotly(a)
+  ticker <- ticker+1
   
   # Save widget
   # saveWidget(ggplotly(a), file = paste("Plots/",CharacteristicName3," boxplots.html",sep=""),background='r')
