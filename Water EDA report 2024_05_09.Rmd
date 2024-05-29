@@ -2,7 +2,12 @@
 title: "EDA report"
 author: "Dan Myers"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    number_sections: FALSE
+    theme: darkly
 ---
 
 This formal, organized report includes data summary statistics, results from exploratory data analysis, and visualizations of all NCRN water quality data. Preparation of this report will inform identification of missing, incomplete, or erroneous data and subsequent updates to the data workflow processes and to the NCRN Water Monitoring Protocol.
@@ -20,6 +25,7 @@ library(mblm)
 library(ggplot2)
 library(plotly)
 library(htmlwidgets)
+library(DT)
 ```
 
 ### Read and format data
@@ -461,10 +467,12 @@ wat <- data.frame(
   arrange(Site_name)
 
 # Print outputs
-print(wat)
-
-# Write to csv
-# write.csv(wat, "Watershed conditions table 1 NLCD.csv", row.names=F)
+# print(wat)
+wat %>% datatable(
+      style = "bootstrap", 
+      class = "display nowrap",
+    ) %>% 
+      formatStyle(names(wat), `font-size` = '12px')
 ```
 
 ### Count number of measurements per site
@@ -514,8 +522,11 @@ wat2 <- data.frame(
   arrange(Site_name)
 
 # Print outputs
-print(wat2)
-
+wat2 %>% datatable(
+      style = "bootstrap", 
+      class = "display nowrap",
+    ) %>% 
+      formatStyle(names(wat2), `font-size` = '12px')
 # Write to csv
 # write.csv(wat2, "Watershed conditions table 2.csv", row.names=F)
 ```
