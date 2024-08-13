@@ -1,5 +1,5 @@
 # Land cover and water quality figures with EDD dataset
-# Dan Myers, 7/30/2024
+# Dan Myers, 8/13/2024
 
 # Load packages
 library(dplyr)
@@ -294,8 +294,8 @@ for (plot_num in 1:3){
     # Add model info to the plot
     # if (gs$coefficients[2,4] < 0.05){
       lines(time_series$Date,g$fitted.values,type='l', col="gold",lwd=2)
-      title(paste("Trend=",round(gs$coefficients[2,1],2),", ",p_disp, ",\nMAD=",
-                  round(gs$coefficients[2,2],2), "         ", sep=""),adj=0.1, line=-1.9, cex.main=1)
+      title(paste("Trend=",round(gs$coefficients[2,1],2),", ",p_disp, ",\nLCI=",
+                  round(lci,2), ", UCI=",round(uci,2), sep=""),adj=0.1, line=-1.9, cex.main=1)
     # }
     
     # Box it in
@@ -702,4 +702,11 @@ wat2 <- data.frame(
   arrange(Site_name)
 
 # Write to csv
-write.csv(wat2, "Watershed conditions table 2 with salt and SC.csv", row.names=F)
+# write.csv(wat2, "Watershed conditions table 2 with salt and SC.csv", row.names=F)
+
+### Calculate number of sites with positive or negative trends (including CI's)
+# Positive trends
+print(current_sites[current_sites$sen_slope>0 & current_sites$ci<5 & current_sites$lci>0,], n=37)
+
+# Negative trends
+print(current_sites[current_sites$sen_slope<0 & current_sites$ci<5 & current_sites$uci<0,], n=37)
